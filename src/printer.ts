@@ -23,9 +23,9 @@ export class LXD02Printer {
   private onStatusChange?: (status: PrinterStatus) => void;
   private authResolver?: (result: boolean) => void;
   private printResolver?: () => void;
-  private _onRetransmitRequested?: (index: number) => void;
-
+  private _onRetransmitRequested?: (index: number) => Promise<void> | void;
   private _resendRequestedIndex: number | null = null;
+  private boundHandleNotifications: ((event: Event) => void) | null = null;
 
   constructor(options?: { onStatusChange?: (status: PrinterStatus) => void }) {
     this.onStatusChange = options?.onStatusChange;
@@ -50,15 +50,20 @@ export class LXD02Printer {
 
     // Start listening for notifications
     await this.rx.startNotifications();
-    this.rx.addEventListener("characteristicvaluechanged", this.handleNotifications.bind(this));
+    this.boundHandleNotifications = this.handleNotifications.bind(this);
+    this.rx.addEventListener("characteristicvaluechanged", this.boundHandleNotifications);
 
     // Start Authentication
     await this.authenticate();
   }
 
   private async authenticate(): Promise<void> {
-    return new Promise(async (resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error("Authentication timeout")), 10000);
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.authResolver = undefined;
+        reject(new Error("Authentication timeout"));
+      }, 10000);
+
       this.authResolver = (success) => {
         clearTimeout(timeout);
         if (success) resolve();
@@ -66,7 +71,11 @@ export class LXD02Printer {
       };
 
       // Stage 0: Initiate Authentication
-      await this.sendRaw(new Uint8Array([0x5a, 0x01]));
+      this.sendRaw(new Uint8Array([0x5a, 0x01])).catch((err) => {
+        clearTimeout(timeout);
+        this.authResolver = undefined;
+        reject(err);
+      });
     });
   }
 
@@ -76,30 +85,17 @@ export class LXD02Printer {
     const packets = processImage(data, options);
     const packetCount = packets.length;
 
-    return new Promise(async (resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error("Print timeout")), 30000);
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.printResolver = undefined;
+        this._onRetransmitRequested = undefined;
+        reject(new Error("Print timeout"));
+      }, 30000);
+
       this.printResolver = () => {
         clearTimeout(timeout);
         this._onRetransmitRequested = undefined;
         resolve();
-      };
-
-      // 1. Send Print Start Command
-      // Length = (Total lines rounded up / 2) + 1 (which is packets.length)
-      const startCmd = new Uint8Array([0x5a, 0x04, (packetCount >> 8) & 0xff, packetCount & 0xff, 0x00, 0x00]);
-      await this.sendRaw(startCmd);
-
-      let isSending = false;
-
-      this._onRetransmitRequested = async (targetIndex: number) => {
-        if (isSending) {
-          // If a loop is already running, just update the index so the loop will jump backwards.
-          this._resendRequestedIndex = targetIndex;
-        } else {
-          // If the loop finished but we haven't received completion (0x06) yet, start a new loop.
-          this._resendRequestedIndex = null;
-          await sendPacketsFrom(targetIndex);
-        }
       };
 
       const sendPacketsFrom = async (startIndex: number) => {
@@ -119,18 +115,48 @@ export class LXD02Printer {
             await this.sendRaw(packets[i]!);
             i++;
           }
+        } catch (err) {
+          clearTimeout(timeout);
+          this.printResolver = undefined;
+          this._onRetransmitRequested = undefined;
+          reject(err);
         } finally {
           isSending = false;
         }
       };
 
-      // 2. Send Packets
-      await sendPacketsFrom(0);
+      // 1. Send Print Start Command
+      // Length = (Total lines rounded up / 2) + 1 (which is packets.length)
+      const startCmd = new Uint8Array([0x5a, 0x04, (packetCount >> 8) & 0xff, packetCount & 0xff, 0x00, 0x00]);
+      
+      let isSending = false;
+
+      this._onRetransmitRequested = async (targetIndex: number) => {
+        if (isSending) {
+          // If a loop is already running, just update the index so the loop will jump backwards.
+          this._resendRequestedIndex = targetIndex;
+        } else {
+          // If the loop finished but we haven't received completion (0x06) yet, start a new loop.
+          this._resendRequestedIndex = null;
+          await sendPacketsFrom(targetIndex);
+        }
+      };
+
+      this.sendRaw(startCmd)
+        .then(() => sendPacketsFrom(0))
+        .catch((err) => {
+          clearTimeout(timeout);
+          this.printResolver = undefined;
+          this._onRetransmitRequested = undefined;
+          reject(err);
+        });
     });
   }
 
-  private async handleNotifications(event: any) {
-    const value = new Uint8Array((event.target as BluetoothRemoteGATTCharacteristic).value!.buffer);
+  private async handleNotifications(event: Event) {
+    const characteristic = event.target as BluetoothRemoteGATTCharacteristic;
+    if (!characteristic.value) return;
+    const value = new Uint8Array(characteristic.value.buffer, characteristic.value.byteOffset, characteristic.value.byteLength);
     if (value.length < 2 || value[0] !== 0x5a) return;
 
     const cmd = value[1];
@@ -178,7 +204,10 @@ export class LXD02Printer {
           // Based on observations: Packet 0x0075 triggers resend from sequence 116 (0x74)
           const targetIndex = Math.max(0, seq - 1);
           if (this._onRetransmitRequested) {
-            this._onRetransmitRequested(targetIndex);
+            const result = this._onRetransmitRequested(targetIndex);
+            if (result instanceof Promise) {
+              await result;
+            }
           } else {
             this._resendRequestedIndex = targetIndex;
           }
@@ -217,10 +246,15 @@ export class LXD02Printer {
   private async sendRaw(data: Uint8Array): Promise<void> {
     if (!this.tx) throw new Error("TX Characteristic not available");
     // Web Bluetooth GATT characteristic writeValueWithoutResponse
-    await this.tx.writeValueWithoutResponse(data as any);
+    await this.tx.writeValueWithoutResponse(data);
   }
 
   disconnect(): void {
+    if (this.rx && this.boundHandleNotifications) {
+      this.rx.removeEventListener("characteristicvaluechanged", this.boundHandleNotifications);
+      this.rx.stopNotifications().catch(() => {});
+      this.boundHandleNotifications = null;
+    }
     if (this.device?.gatt?.connected) {
       this.device.gatt.disconnect();
     }
