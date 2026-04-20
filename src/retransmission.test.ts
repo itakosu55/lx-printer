@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { LXD02Printer } from "./printer";
 
 describe("LXD02Printer Retransmission", () => {
@@ -10,7 +10,9 @@ describe("LXD02Printer Retransmission", () => {
     const mockEvent = {
       target: {
         value: {
-          buffer: mockValue.buffer
+          buffer: mockValue.buffer,
+          byteOffset: 0,
+          byteLength: mockValue.length
         }
       }
     };
@@ -24,7 +26,15 @@ describe("LXD02Printer Retransmission", () => {
   it("should handle boundary cases (seq 0)", async () => {
     const printer = new LXD02Printer() as any;
     const mockValue = new Uint8Array([0x5A, 0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
-    const mockEvent = { target: { value: { buffer: mockValue.buffer } } };
+    const mockEvent = { 
+      target: { 
+        value: { 
+          buffer: mockValue.buffer,
+          byteOffset: 0,
+          byteLength: mockValue.length
+        } 
+      } 
+    };
 
     await printer.handleNotifications(mockEvent);
     expect(printer._resendRequestedIndex).toBe(0);
