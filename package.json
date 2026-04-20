@@ -47,7 +47,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/itakosu55/lx-printer.git"
+    "url": "git+https://github.com/itakosu55/lx-printer.git"
   },
   "homepage": "https://github.com/itakosu55/lx-printer",
   "bugs": {
