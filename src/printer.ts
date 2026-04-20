@@ -246,7 +246,7 @@ export class LXD02Printer {
   private async sendRaw(data: Uint8Array): Promise<void> {
     if (!this.tx) throw new Error("TX Characteristic not available");
     // Web Bluetooth GATT characteristic writeValueWithoutResponse
-    await this.tx.writeValueWithoutResponse(data);
+    await this.tx.writeValueWithoutResponse(data as BufferSource);
   }
 
   disconnect(): void {

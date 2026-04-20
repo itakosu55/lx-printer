@@ -16,4 +16,3 @@ if (!isBluetoothSupported) {
 
 export { LXD02Printer };
 export type { PrinterStatus } from "./printer";
-export type { ImageProcessingOptions } from "./image";
