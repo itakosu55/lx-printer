@@ -11,9 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  checks: write
   contents: read
-  pull-requests: write
 
 jobs:
   run_lint:
