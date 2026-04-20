@@ -23,6 +23,9 @@ export class LXD02Printer {
   private onStatusChange?: (status: PrinterStatus) => void;
   private authResolver?: (result: boolean) => void;
   private printResolver?: () => void;
+  private _onRetransmitRequested?: (index: number) => void;
+
+  private _resendRequestedIndex: number | null = null;
 
   constructor(options?: { onStatusChange?: (status: PrinterStatus) => void }) {
     this.onStatusChange = options?.onStatusChange;
@@ -77,6 +80,7 @@ export class LXD02Printer {
       const timeout = setTimeout(() => reject(new Error("Print timeout")), 30000);
       this.printResolver = () => {
         clearTimeout(timeout);
+        this._onRetransmitRequested = undefined;
         resolve();
       };
 
@@ -85,11 +89,43 @@ export class LXD02Printer {
       const startCmd = new Uint8Array([0x5a, 0x04, (packetCount >> 8) & 0xff, packetCount & 0xff, 0x00, 0x00]);
       await this.sendRaw(startCmd);
 
+      let isSending = false;
+
+      this._onRetransmitRequested = async (targetIndex: number) => {
+        if (isSending) {
+          // If a loop is already running, just update the index so the loop will jump backwards.
+          this._resendRequestedIndex = targetIndex;
+        } else {
+          // If the loop finished but we haven't received completion (0x06) yet, start a new loop.
+          this._resendRequestedIndex = null;
+          await sendPacketsFrom(targetIndex);
+        }
+      };
+
+      const sendPacketsFrom = async (startIndex: number) => {
+        isSending = true;
+        try {
+          let i = startIndex;
+          while (i < packetCount) {
+            // Check if a retransmission was requested via notification during the loop
+            if (this._resendRequestedIndex !== null) {
+              const target = this._resendRequestedIndex;
+              this._resendRequestedIndex = null;
+              if (target < packetCount) {
+                i = target;
+              }
+            }
+
+            await this.sendRaw(packets[i]!);
+            i++;
+          }
+        } finally {
+          isSending = false;
+        }
+      };
+
       // 2. Send Packets
-      // Note: We might need small delays between packets for stability depending on the hardware
-      for (const packet of packets) {
-        await this.sendRaw(packet);
-      }
+      await sendPacketsFrom(0);
     });
   }
 
@@ -133,6 +169,19 @@ export class LXD02Printer {
         if (this.authResolver) {
           this.authResolver(value[2] === 0x01);
           this.authResolver = undefined;
+        }
+        break;
+
+      case 0x05: // Retransmission Request
+        if (value.length >= 4) {
+          const seq = (value[2]! << 8) | value[3]!;
+          // Based on observations: Packet 0x0075 triggers resend from sequence 116 (0x74)
+          const targetIndex = Math.max(0, seq - 1);
+          if (this._onRetransmitRequested) {
+            this._onRetransmitRequested(targetIndex);
+          } else {
+            this._resendRequestedIndex = targetIndex;
+          }
         }
         break;
 

@@ -133,3 +133,14 @@ After receiving this, the host replies with the following command as an acknowle
 - **Host -> Printer**: `[0x5A, 0x04, PrintLen_MSB, PrintLen_LSB, 0x01, 0x00]`
 
 This returns the printer to a standby state (connected) where it can accept the next print.
+
+### 2.4. Error Recovery (Retransmission)
+
+During the image data transfer (Stage 2), the printer may request a retransmission if it detects a sequence gap or communication error.
+
+- **Printer -> Host**: `[0x5A, 0x05, Seq_MSB, Seq_LSB, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]` (12 bytes)
+  - `Byte[2]-[3]`: The sequence number the printer next expects or failed at.
+
+Upon receiving this packet, the host should immediately stop the current transfer and resume sending data packets starting from the specified sequence number (or `Seq - 1` depending on implementation observed in official apps).
+
+_Note: In analyzed official app logs, a request with `0x0075` triggered retransmission from sequence `116 (0x74)`, suggesting the printer might indicate the next expected 1-based index, while the host uses 0-based indices._
