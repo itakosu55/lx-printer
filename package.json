@@ -19,7 +19,7 @@
     "lint:fix": "prettier . --write && eslint . --fix",
     "type-check": "tsc --noEmit",
     "demo": "vite demo",
-    "build:demo": "vite build demo --base /lx-printer/ --outDir ../dist-demo --emptyOutDir",
+    "build:demo": "vite build demo --base ./ --outDir ../dist-demo --emptyOutDir",
     "test": "vitest run",
     "test:watch": "vitest"
   },
