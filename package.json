@@ -16,7 +16,7 @@
     "dev": "tsup src/lx-d02.ts --watch --dts",
     "build": "tsup src/lx-d02.ts --format esm --dts --clean",
     "lint": "eslint . && prettier . --check",
-    "lint:fix": "prettier . --write && eslint --fix",
+    "lint:fix": "prettier . --write && eslint . --fix",
     "type-check": "tsc --noEmit",
     "demo": "vite demo",
     "test": "vitest run",
