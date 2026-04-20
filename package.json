@@ -4,7 +4,10 @@
   "description": "Print library for LX series thermal printers",
   "type": "module",
   "exports": {
-    "./lx-d02": "./dist/lx-d02.js"
+    "./lx-d02": {
+      "types": "./dist/lx-d02.d.ts",
+      "default": "./dist/lx-d02.js"
+    }
   },
   "files": [
     "dist"

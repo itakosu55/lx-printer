@@ -24,6 +24,10 @@ export function processImage(data: HTMLImageElement | HTMLCanvasElement | Uint8A
     const sourceWidth = data instanceof HTMLImageElement ? data.naturalWidth : data.width;
     const sourceHeight = data instanceof HTMLImageElement ? data.naturalHeight : data.height;
     
+    if (sourceWidth === 0 || sourceHeight === 0) {
+      throw new Error("Invalid image dimensions: source has 0 width or height. Ensure the image is fully loaded.");
+    }
+
     // Scale to 384px width
     const targetWidth = 384;
     const scale = targetWidth / sourceWidth;

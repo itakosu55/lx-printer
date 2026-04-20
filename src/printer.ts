@@ -36,25 +36,53 @@ export class LXD02Printer {
       throw new Error("Web Bluetooth API is not supported in this environment.");
     }
 
-    this.device = await navigator.bluetooth.requestDevice({
-      filters: [{ namePrefix: "LX" }],
-      optionalServices: [SERVICE_UUID],
-    });
+    try {
+      this.device = await navigator.bluetooth.requestDevice({
+        filters: [{ namePrefix: "LX" }],
+        optionalServices: [SERVICE_UUID],
+      });
 
-    const server = await this.device.gatt?.connect();
-    if (!server) throw new Error("Failed to connect to GATT server");
+      const server = await this.device.gatt?.connect();
+      if (!server) throw new Error("Failed to connect to GATT server");
 
-    const service = await server.getPrimaryService(SERVICE_UUID);
-    this.tx = await service.getCharacteristic(CHR_TX_UUID);
-    this.rx = await service.getCharacteristic(CHR_RX_UUID);
+      const service = await server.getPrimaryService(SERVICE_UUID);
+      this.tx = await service.getCharacteristic(CHR_TX_UUID);
+      this.rx = await service.getCharacteristic(CHR_RX_UUID);
 
-    // Start listening for notifications
-    await this.rx.startNotifications();
-    this.boundHandleNotifications = this.handleNotifications.bind(this);
-    this.rx.addEventListener("characteristicvaluechanged", this.boundHandleNotifications);
+      // Start listening for notifications
+      await this.rx.startNotifications();
+      this.boundHandleNotifications = (event: Event) => {
+        this.handleNotifications(event).catch((err) => {
+          console.error("Unhandled error in GATT notification handler:", err);
+        });
+      };
+      this.rx.addEventListener("characteristicvaluechanged", this.boundHandleNotifications);
 
-    // Start Authentication
-    await this.authenticate();
+      // Start Authentication
+      await this.authenticate();
+    } catch (error) {
+      if (this.rx && this.boundHandleNotifications) {
+        this.rx.removeEventListener("characteristicvaluechanged", this.boundHandleNotifications);
+      }
+
+      if (this.rx) {
+        try {
+          await this.rx.stopNotifications();
+        } catch {
+          // Best-effort cleanup; preserve the original error.
+        }
+      }
+
+      if (this.device?.gatt?.connected) {
+        this.device.gatt.disconnect();
+      }
+
+      this.boundHandleNotifications = null;
+      this.tx = null;
+      this.rx = null;
+
+      throw error;
+    }
   }
 
   private async authenticate(): Promise<void> {
@@ -192,7 +220,7 @@ export class LXD02Printer {
         break;
 
       case 0x0b: // Auth Stage 3: Result
-        if (this.authResolver) {
+        if (this.authResolver && value.length >= 3) {
           this.authResolver(value[2] === 0x01);
           this.authResolver = undefined;
         }
@@ -230,12 +258,14 @@ export class LXD02Printer {
         break;
 
       case 0x06: // Print Completion
-        const printLen = (value[2]! << 8) | value[3]!;
-        // Send ACK
-        await this.sendRaw(new Uint8Array([0x5a, 0x04, (printLen >> 8) & 0xff, printLen & 0xff, 0x01, 0x00]));
-        if (this.printResolver) {
-          this.printResolver();
-          this.printResolver = undefined;
+        if (value.length >= 4) {
+          const printLen = (value[2]! << 8) | value[3]!;
+          // Send ACK
+          await this.sendRaw(new Uint8Array([0x5a, 0x04, (printLen >> 8) & 0xff, printLen & 0xff, 0x01, 0x00]));
+          if (this.printResolver) {
+            this.printResolver();
+            this.printResolver = undefined;
+          }
         }
         break;
     }
