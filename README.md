@@ -25,13 +25,13 @@ npm install lx-printer
 ### Basic Image Printing
 
 ```typescript
-import { LXD02Printer } from "lx-printer/lx-d02";
+import { LXD02Printer } from 'lx-printer/lx-d02';
 
 const printer = new LXD02Printer({
   onStatusChange: (status) => {
     console.log(`Battery: ${status.battery}%`);
     if (status.isOutOfPaper) {
-      console.error("Out of paper!");
+      console.error('Out of paper!');
     }
   },
 });
@@ -40,7 +40,7 @@ const printer = new LXD02Printer({
 await printer.connect();
 
 // Print an HTML image or canvas element
-const img = document.getElementById("my-image") as HTMLImageElement;
+const img = document.getElementById('my-image') as HTMLImageElement;
 await printer.print(img);
 
 // Disconnect when done
