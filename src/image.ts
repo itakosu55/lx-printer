@@ -17,7 +17,10 @@ export function processImage(
   let binaryData: Uint8Array;
   let lineCount: number;
 
-  if (options.isRaw && data instanceof Uint8Array) {
+  if (data instanceof Uint8Array) {
+    if (!options.isRaw) {
+      throw new Error("Uint8Array data requires options.isRaw to be true");
+    }
     binaryData = data;
     if (binaryData.length % 48 !== 0) {
       throw new Error("Raw data length must be a multiple of 48 (384px / 8)");
@@ -29,8 +32,8 @@ export function processImage(
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) throw new Error("Could not get canvas context");
 
-    const sourceWidth = data instanceof HTMLImageElement ? data.naturalWidth : (data as HTMLCanvasElement).width;
-    const sourceHeight = data instanceof HTMLImageElement ? data.naturalHeight : (data as HTMLCanvasElement).height;
+    const sourceWidth = data instanceof HTMLImageElement ? data.naturalWidth : data.width;
+    const sourceHeight = data instanceof HTMLImageElement ? data.naturalHeight : data.height;
     
     // Scale to 384px width
     const targetWidth = 384;
@@ -41,7 +44,7 @@ export function processImage(
     canvas.height = targetHeight;
     ctx.fillStyle = "white";
     ctx.fillRect(0, 0, targetWidth, targetHeight);
-    ctx.drawImage(data as any, 0, 0, targetWidth, targetHeight);
+    ctx.drawImage(data, 0, 0, targetWidth, targetHeight);
 
     const imageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
     binaryData = applyDitheringAndPack(imageData);
