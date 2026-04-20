@@ -2,25 +2,14 @@
  * Image processing utilities for LX-D02 thermal printer
  */
 
-export interface ImageProcessingOptions {
-  /** If true, the input is treated as raw 1-bit-per-pixel data (48 bytes per line, 384px wide) */
-  isRaw?: boolean;
-}
-
 /**
  * Process an image and convert it into 100-byte packets for the LX-D02 printer.
  */
-export function processImage(
-  data: HTMLImageElement | HTMLCanvasElement | Uint8Array,
-  options: ImageProcessingOptions = {}
-): Uint8Array[] {
+export function processImage(data: HTMLImageElement | HTMLCanvasElement | Uint8Array): Uint8Array[] {
   let binaryData: Uint8Array;
   let lineCount: number;
 
   if (data instanceof Uint8Array) {
-    if (!options.isRaw) {
-      throw new Error("Uint8Array data requires options.isRaw to be true");
-    }
     binaryData = data;
     if (binaryData.length % 48 !== 0) {
       throw new Error("Raw data length must be a multiple of 48 (384px / 8)");

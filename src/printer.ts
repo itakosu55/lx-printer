@@ -1,5 +1,5 @@
 import { calculateAuthResponse, generateAuthBytes } from "./auth";
-import { processImage, ImageProcessingOptions } from "./image";
+import { processImage } from "./image";
 
 const SERVICE_UUID = 0xffe6;
 const CHR_TX_UUID = 0xffe1; // Write Without Response
@@ -79,10 +79,10 @@ export class LXD02Printer {
     });
   }
 
-  async print(data: HTMLImageElement | HTMLCanvasElement | Uint8Array, options: ImageProcessingOptions = {}): Promise<void> {
+  async print(data: HTMLImageElement | HTMLCanvasElement | Uint8Array): Promise<void> {
     if (!this.tx) throw new Error("Printer not connected");
 
-    const packets = processImage(data, options);
+    const packets = processImage(data);
     const packetCount = packets.length;
 
     return new Promise((resolve, reject) => {

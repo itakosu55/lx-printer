@@ -7,7 +7,7 @@ describe("image", () => {
     const rawData = new Uint8Array(96);
     rawData.fill(0xAA); // Dummy pattern
 
-    const packets = processImage(rawData, { isRaw: true });
+    const packets = processImage(rawData);
 
     // Should result in 1 data packet + 1 footer packet = 2 packets
     expect(packets.length).toBe(2);
@@ -29,6 +29,6 @@ describe("image", () => {
 
   it("should throw error for invalid raw data length", () => {
     const invalidData = new Uint8Array(10);
-    expect(() => processImage(invalidData, { isRaw: true })).toThrow();
+    expect(() => processImage(invalidData)).toThrow();
   });
 });

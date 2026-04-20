@@ -122,7 +122,7 @@ btnPrint.addEventListener("click", async () => {
         }
 
         log("Sending print commands...");
-        await printer.print(data, { isRaw: true });
+        await printer.print(data);
         log("Print completed.", "success");
 
     } catch (err: any) {
