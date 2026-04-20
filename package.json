@@ -1,0 +1,44 @@
+{
+  "name": "lx-printer",
+  "version": "0.1.0",
+  "description": "Print library for LX series thermal printers",
+  "type": "module",
+  "exports": {
+    "./lx-d02": "./dist/lx-d02.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "tsup src/lx-d02.ts --watch --dts",
+    "build": "tsup src/lx-d02.ts --format esm --dts --clean",
+    "demo": "vite demo",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "lx-d02",
+    "thermal-printer",
+    "web-bluetooth",
+    "bluetooth"
+  ],
+  "author": "itakosu55",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "@types/web-bluetooth": "^0.0.20",
+    "jsdom": "^29.0.2",
+    "tsup": "^8.0.2",
+    "typescript": "^5.4.5",
+    "vite": "^8.0.9",
+    "vitest": "^1.6.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/itakosu55/lx-printer.git"
+  },
+  "homepage": "https://github.com/itakosu55/lx-printer",
+  "bugs": {
+    "url": "https://github.com/itakosu55/lx-printer/issues"
+  }
+}
