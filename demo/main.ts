@@ -29,6 +29,11 @@ function log(message: string, type: 'info' | 'error' | 'success' = 'info') {
   logConsole.scrollTop = logConsole.scrollHeight;
 }
 
+function handleError(err: unknown, prefix: string) {
+  const message = err instanceof Error ? err.message : String(err);
+  log(`${prefix}: ${message}`, 'error');
+}
+
 btnClearLog.addEventListener('click', () => {
   logConsole.innerHTML = '';
 });
@@ -97,8 +102,7 @@ btnConnect.addEventListener('click', async () => {
     updateUI();
     log('Printer connected and authenticated!', 'success');
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    log(`Connection failed: ${message}`, 'error');
+    handleError(err, 'Connection failed');
     isConnected = false;
     updateUI();
   }
@@ -132,8 +136,7 @@ btnPrint.addEventListener('click', async () => {
     await printer.print(data);
     log('Print completed.', 'success');
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    log(`Print failed: ${message}`, 'error');
+    handleError(err, 'Print failed');
   } finally {
     btnPrint.disabled = false;
     btnPrintFile.disabled = false;
@@ -168,8 +171,7 @@ inputFile.addEventListener('change', async (e) => {
 
     URL.revokeObjectURL(url);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    log(`Print failed: ${message}`, 'error');
+    handleError(err, 'Print failed');
   } finally {
     btnPrint.disabled = false;
     btnPrintFile.disabled = false;
