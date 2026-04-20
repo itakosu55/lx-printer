@@ -5,27 +5,33 @@
 /**
  * Process an image and convert it into 100-byte packets for the LX-D02 printer.
  */
-export function processImage(data: HTMLImageElement | HTMLCanvasElement | Uint8Array): Uint8Array[] {
+export function processImage(
+  data: HTMLImageElement | HTMLCanvasElement | Uint8Array
+): Uint8Array[] {
   let binaryData: Uint8Array;
   let lineCount: number;
 
   if (data instanceof Uint8Array) {
     binaryData = data;
     if (binaryData.length % 48 !== 0) {
-      throw new Error("Raw data length must be a multiple of 48 (384px / 8)");
+      throw new Error('Raw data length must be a multiple of 48 (384px / 8)');
     }
     lineCount = binaryData.length / 48;
   } else {
     // Process image/canvas to 384px wide dithered 1-bit data
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    if (!ctx) throw new Error("Could not get canvas context");
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) throw new Error('Could not get canvas context');
 
-    const sourceWidth = data instanceof HTMLImageElement ? data.naturalWidth : data.width;
-    const sourceHeight = data instanceof HTMLImageElement ? data.naturalHeight : data.height;
-    
+    const sourceWidth =
+      data instanceof HTMLImageElement ? data.naturalWidth : data.width;
+    const sourceHeight =
+      data instanceof HTMLImageElement ? data.naturalHeight : data.height;
+
     if (sourceWidth === 0 || sourceHeight === 0) {
-      throw new Error("Invalid image dimensions: source has 0 width or height. Ensure the image is fully loaded.");
+      throw new Error(
+        'Invalid image dimensions: source has 0 width or height. Ensure the image is fully loaded.'
+      );
     }
 
     // Scale to 384px width
@@ -35,7 +41,7 @@ export function processImage(data: HTMLImageElement | HTMLCanvasElement | Uint8A
 
     canvas.width = targetWidth;
     canvas.height = targetHeight;
-    ctx.fillStyle = "white";
+    ctx.fillStyle = 'white';
     ctx.fillRect(0, 0, targetWidth, targetHeight);
     ctx.drawImage(data, 0, 0, targetWidth, targetHeight);
 
@@ -47,17 +53,17 @@ export function processImage(data: HTMLImageElement | HTMLCanvasElement | Uint8A
   // Split into 96-byte blocks (2 lines) and create 100-byte packets
   const packets: Uint8Array[] = [];
   const totalBlocks = Math.ceil(lineCount / 2);
-  
+
   for (let i = 0; i < totalBlocks; i++) {
     const packet = new Uint8Array(100);
     packet[0] = 0x55; // Line header
     packet[1] = (i >> 8) & 0xff; // Seq MSB
     packet[2] = i & 0xff; // Seq LSB
-    
+
     const startOffset = i * 96;
     const endOffset = Math.min(startOffset + 96, binaryData.length);
     packet.set(binaryData.subarray(startOffset, endOffset), 3);
-    
+
     // Byte[99] is 0x00 padding (already 0 by initialization)
     packets.push(packet);
   }
@@ -98,12 +104,12 @@ function applyDitheringAndPack(imageData: ImageData): Uint8Array {
       result[idx] = oldPixel < 128 ? 1 : 0; // 1 = Black, 0 = White for printer
 
       const error = oldPixel - newPixel;
-      
-      if (x + 1 < width) gray[idx + 1] += error * 7 / 16;
+
+      if (x + 1 < width) gray[idx + 1] += (error * 7) / 16;
       if (y + 1 < height) {
-        if (x > 0) gray[idx + width - 1] += error * 3 / 16;
-        gray[idx + width] += error * 5 / 16;
-        if (x + 1 < width) gray[idx + width + 1] += error * 1 / 16;
+        if (x > 0) gray[idx + width - 1] += (error * 3) / 16;
+        gray[idx + width] += (error * 5) / 16;
+        if (x + 1 < width) gray[idx + width + 1] += (error * 1) / 16;
       }
     }
   }
@@ -116,7 +122,7 @@ function applyDitheringAndPack(imageData: ImageData): Uint8Array {
       if (result[y * width + x]) {
         const byteIdx = y * 48 + Math.floor(x / 8);
         const bitIdx = 7 - (x % 8);
-        packed[byteIdx] |= (1 << bitIdx);
+        packed[byteIdx] |= 1 << bitIdx;
       }
     }
   }

@@ -30,20 +30,23 @@ export function generateAuthBytes(): Uint8Array {
 
 /**
  * Stage 2: Calculate 10-byte response from challenge bytes and MAC address
- * 
+ *
  * Each response byte is the MSB of a CRC-16 calculation:
  * CRC16([authByte, ...macAddress])
  */
-export function calculateAuthResponse(authBytes: Uint8Array, macAddress: Uint8Array): Uint8Array {
-  if (authBytes.length !== 10) throw new Error("authBytes must be 10 bytes");
-  if (macAddress.length !== 6) throw new Error("macAddress must be 6 bytes");
+export function calculateAuthResponse(
+  authBytes: Uint8Array,
+  macAddress: Uint8Array
+): Uint8Array {
+  if (authBytes.length !== 10) throw new Error('authBytes must be 10 bytes');
+  if (macAddress.length !== 6) throw new Error('macAddress must be 6 bytes');
 
   const response = new Uint8Array(10);
   for (let i = 0; i < 10; i++) {
     const dataToCrc = new Uint8Array(7);
     dataToCrc[0] = authBytes[i]!;
     dataToCrc.set(macAddress, 1);
-    
+
     const crc = calculateCrc16Xmodem(dataToCrc);
     response[i] = (crc >> 8) & 0xff;
   }

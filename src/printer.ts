@@ -1,5 +1,5 @@
-import { calculateAuthResponse, generateAuthBytes } from "./auth";
-import { processImage } from "./image";
+import { calculateAuthResponse, generateAuthBytes } from './auth';
+import { processImage } from './image';
 
 const SERVICE_UUID = 0xffe6;
 const CHR_TX_UUID = 0xffe1; // Write Without Response
@@ -33,17 +33,19 @@ export class LXD02Printer {
 
   async connect(): Promise<void> {
     if (!navigator.bluetooth) {
-      throw new Error("Web Bluetooth API is not supported in this environment.");
+      throw new Error(
+        'Web Bluetooth API is not supported in this environment.'
+      );
     }
 
     try {
       this.device = await navigator.bluetooth.requestDevice({
-        filters: [{ namePrefix: "LX" }],
+        filters: [{ namePrefix: 'LX' }],
         optionalServices: [SERVICE_UUID],
       });
 
       const server = await this.device.gatt?.connect();
-      if (!server) throw new Error("Failed to connect to GATT server");
+      if (!server) throw new Error('Failed to connect to GATT server');
 
       const service = await server.getPrimaryService(SERVICE_UUID);
       this.tx = await service.getCharacteristic(CHR_TX_UUID);
@@ -53,16 +55,22 @@ export class LXD02Printer {
       await this.rx.startNotifications();
       this.boundHandleNotifications = (event: Event) => {
         this.handleNotifications(event).catch((err) => {
-          console.error("Unhandled error in GATT notification handler:", err);
+          console.error('Unhandled error in GATT notification handler:', err);
         });
       };
-      this.rx.addEventListener("characteristicvaluechanged", this.boundHandleNotifications);
+      this.rx.addEventListener(
+        'characteristicvaluechanged',
+        this.boundHandleNotifications
+      );
 
       // Start Authentication
       await this.authenticate();
     } catch (error) {
       if (this.rx && this.boundHandleNotifications) {
-        this.rx.removeEventListener("characteristicvaluechanged", this.boundHandleNotifications);
+        this.rx.removeEventListener(
+          'characteristicvaluechanged',
+          this.boundHandleNotifications
+        );
       }
 
       if (this.rx) {
@@ -89,13 +97,13 @@ export class LXD02Printer {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.authResolver = undefined;
-        reject(new Error("Authentication timeout"));
+        reject(new Error('Authentication timeout'));
       }, 10000);
 
       this.authResolver = (success) => {
         clearTimeout(timeout);
         if (success) resolve();
-        else reject(new Error("Authentication failed"));
+        else reject(new Error('Authentication failed'));
       };
 
       // Stage 0: Initiate Authentication
@@ -107,8 +115,10 @@ export class LXD02Printer {
     });
   }
 
-  async print(data: HTMLImageElement | HTMLCanvasElement | Uint8Array): Promise<void> {
-    if (!this.tx) throw new Error("Printer not connected");
+  async print(
+    data: HTMLImageElement | HTMLCanvasElement | Uint8Array
+  ): Promise<void> {
+    if (!this.tx) throw new Error('Printer not connected');
 
     const packets = processImage(data);
     const packetCount = packets.length;
@@ -117,7 +127,7 @@ export class LXD02Printer {
       const timeout = setTimeout(() => {
         this.printResolver = undefined;
         this._onRetransmitRequested = undefined;
-        reject(new Error("Print timeout"));
+        reject(new Error('Print timeout'));
       }, 30000);
 
       this.printResolver = () => {
@@ -155,8 +165,15 @@ export class LXD02Printer {
 
       // 1. Send Print Start Command
       // Length = (Total lines rounded up / 2) + 1 (which is packets.length)
-      const startCmd = new Uint8Array([0x5a, 0x04, (packetCount >> 8) & 0xff, packetCount & 0xff, 0x00, 0x00]);
-      
+      const startCmd = new Uint8Array([
+        0x5a,
+        0x04,
+        (packetCount >> 8) & 0xff,
+        packetCount & 0xff,
+        0x00,
+        0x00,
+      ]);
+
       let isSending = false;
 
       this._onRetransmitRequested = async (targetIndex: number) => {
@@ -184,7 +201,11 @@ export class LXD02Printer {
   private async handleNotifications(event: Event) {
     const characteristic = event.target as BluetoothRemoteGATTCharacteristic;
     if (!characteristic.value) return;
-    const value = new Uint8Array(characteristic.value.buffer, characteristic.value.byteOffset, characteristic.value.byteLength);
+    const value = new Uint8Array(
+      characteristic.value.buffer,
+      characteristic.value.byteOffset,
+      characteristic.value.byteLength
+    );
     if (value.length < 2 || value[0] !== 0x5a) return;
 
     const cmd = value[1];
@@ -195,10 +216,10 @@ export class LXD02Printer {
           const mac = value.subarray(4, 10);
           const authBytes = generateAuthBytes();
           const response = calculateAuthResponse(authBytes, mac);
-          
+
           // Store auth state if needed, or just send immediately
-          this._lastAuthResponse = response; 
-          
+          this._lastAuthResponse = response;
+
           // Send Challenge
           const challengeCmd = new Uint8Array(12);
           challengeCmd[0] = 0x5a;
@@ -261,7 +282,16 @@ export class LXD02Printer {
         if (value.length >= 4) {
           const printLen = (value[2]! << 8) | value[3]!;
           // Send ACK
-          await this.sendRaw(new Uint8Array([0x5a, 0x04, (printLen >> 8) & 0xff, printLen & 0xff, 0x01, 0x00]));
+          await this.sendRaw(
+            new Uint8Array([
+              0x5a,
+              0x04,
+              (printLen >> 8) & 0xff,
+              printLen & 0xff,
+              0x01,
+              0x00,
+            ])
+          );
           if (this.printResolver) {
             this.printResolver();
             this.printResolver = undefined;
@@ -274,14 +304,17 @@ export class LXD02Printer {
   private _lastAuthResponse?: Uint8Array;
 
   private async sendRaw(data: Uint8Array): Promise<void> {
-    if (!this.tx) throw new Error("TX Characteristic not available");
+    if (!this.tx) throw new Error('TX Characteristic not available');
     // Web Bluetooth GATT characteristic writeValueWithoutResponse
     await this.tx.writeValueWithoutResponse(data as BufferSource);
   }
 
   disconnect(): void {
     if (this.rx && this.boundHandleNotifications) {
-      this.rx.removeEventListener("characteristicvaluechanged", this.boundHandleNotifications);
+      this.rx.removeEventListener(
+        'characteristicvaluechanged',
+        this.boundHandleNotifications
+      );
       this.rx.stopNotifications().catch(() => {});
       this.boundHandleNotifications = null;
     }
