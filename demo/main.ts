@@ -101,8 +101,7 @@ btnConnect.addEventListener('click', async () => {
         statFlags.style.color =
           flags.length > 0 ? 'var(--error)' : 'var(--success)';
 
-        statDensity.textContent =
-          status.density !== undefined ? status.density.toString() : '--';
+        statDensity.textContent = status.density.toString();
       },
     });
 
