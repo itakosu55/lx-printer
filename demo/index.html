@@ -210,6 +210,11 @@
         color: var(--success);
       }
 
+      option {
+        background-color: var(--bg);
+        color: var(--text);
+      }
+
       ::-webkit-scrollbar {
         width: 8px;
       }
@@ -255,10 +260,50 @@
             No Data
           </div>
         </div>
+        <div class="stat-card" style="grid-column: span 2">
+          <div class="stat-label">Current Density</div>
+          <div id="stat-density" class="stat-value">--</div>
+        </div>
       </div>
 
       <div class="controls">
         <button id="btn-connect" class="btn-primary">Connect Printer</button>
+        <div style="margin-top: 8px">
+          <label
+            for="select-density"
+            style="
+              font-size: 0.8rem;
+              color: var(--text-muted);
+              display: block;
+              margin-bottom: 6px;
+              padding-left: 4px;
+            "
+            >Print Density</label
+          >
+          <select
+            id="select-density"
+            class="btn-secondary"
+            style="
+              width: 100%;
+              padding: 12px 16px;
+              border-radius: 12px;
+              appearance: none;
+              outline: none;
+              font-family: inherit;
+              font-size: 1rem;
+              cursor: pointer;
+            "
+          >
+            <option value="">Keep Current (No Change)</option>
+            <option value="1">1 (Lightest)</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4 (Normal)</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+            <option value="7">7 (Darkest)</option>
+          </select>
+        </div>
         <div
           style="
             display: grid;
