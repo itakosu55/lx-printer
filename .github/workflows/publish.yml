@@ -23,6 +23,7 @@ jobs:
           node-version: 24
           cache: 'npm'
           cache-dependency-path: 'package-lock.json'
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Install node modules
         run: npm ci
