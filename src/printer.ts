@@ -118,8 +118,17 @@ export class LXD02Printer {
   }
 
   async setDensity(density: number): Promise<void> {
+    if (!Number.isInteger(density)) {
+      throw new Error('Density must be an integer between 1 and 7');
+    }
+
     if (density < 1 || density > 7) {
       throw new Error('Density must be between 1 and 7');
+    }
+
+    // Guard against in-flight density changes
+    if (this.densityResolver) {
+      throw new Error('Density setting is already in progress');
     }
 
     // Skip if density is already set to the target value
@@ -135,8 +144,15 @@ export class LXD02Printer {
 
       this.densityResolver = (success) => {
         clearTimeout(timeout);
-        if (success) resolve();
-        else reject(new Error('Failed to set density'));
+        this.densityResolver = undefined;
+        if (success) {
+          if (this.status) {
+            this.status.density = density;
+          }
+          resolve();
+        } else {
+          reject(new Error('Failed to set density'));
+        }
       };
 
       this.sendRaw(new Uint8Array([0x5a, 0x0c, density - 1])).catch((err) => {
@@ -285,9 +301,8 @@ export class LXD02Printer {
         break;
 
       case 0x0c: // Density setting ACK
-        if (this.densityResolver) {
+        if (this.densityResolver && value.length >= 3) {
           this.densityResolver(true);
-          this.densityResolver = undefined;
         }
         break;
 
