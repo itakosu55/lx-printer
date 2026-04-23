@@ -16,6 +16,10 @@ const statBattery = document.getElementById('stat-battery') as HTMLDivElement;
 const statVoltage = document.getElementById('stat-voltage') as HTMLDivElement;
 const statCharging = document.getElementById('stat-charging') as HTMLDivElement;
 const statFlags = document.getElementById('stat-flags') as HTMLDivElement;
+const statDensity = document.getElementById('stat-density') as HTMLDivElement;
+const selectDensity = document.getElementById(
+  'select-density'
+) as HTMLSelectElement;
 const logConsole = document.getElementById('console') as HTMLDivElement;
 
 let printer: LXD02Printer | null = null;
@@ -58,6 +62,8 @@ function updateUI() {
     statVoltage.textContent = '---- mV';
     statCharging.textContent = '--';
     statFlags.textContent = 'No Data';
+    statDensity.textContent = '--';
+    selectDensity.value = '';
   }
 }
 
@@ -94,6 +100,8 @@ btnConnect.addEventListener('click', async () => {
         statFlags.textContent = flags.length > 0 ? flags.join(', ') : 'Normal';
         statFlags.style.color =
           flags.length > 0 ? 'var(--error)' : 'var(--success)';
+
+        statDensity.textContent = status.density.toString();
       },
     });
 
@@ -133,7 +141,11 @@ btnPrint.addEventListener('click', async () => {
     }
 
     log('Sending print commands...');
-    await printer.print(data);
+    const options: { density?: number } = {};
+    if (selectDensity.value) {
+      options.density = parseInt(selectDensity.value, 10);
+    }
+    await printer.print(data, options);
     log('Print completed.', 'success');
   } catch (err) {
     handleError(err, 'Print failed');
@@ -166,7 +178,11 @@ inputFile.addEventListener('change', async (e) => {
     });
 
     log('Processing and printing image...');
-    await printer.print(img);
+    const options: { density?: number } = {};
+    if (selectDensity.value) {
+      options.density = parseInt(selectDensity.value, 10);
+    }
+    await printer.print(img, options);
     log('Printing finished!', 'success');
 
     URL.revokeObjectURL(url);

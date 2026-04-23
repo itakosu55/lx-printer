@@ -39,9 +39,9 @@ const printer = new LXD02Printer({
 // Request device and connect
 await printer.connect();
 
-// Print an HTML image or canvas element
+// Print an HTML image or canvas element (with optional density 1-7)
 const img = document.getElementById('my-image') as HTMLImageElement;
-await printer.print(img);
+await printer.print(img, { density: 7 });
 
 // Disconnect when done
 printer.disconnect();
@@ -69,12 +69,17 @@ await printer.print(rawData);
 
 Requests a Bluetooth device matching the LX prefix and establishes a connection. Performs challenge-response authentication automatically.
 
-#### `print(data: HTMLImageElement | HTMLCanvasElement | Uint8Array): Promise<void>`
+#### `print(data: HTMLImageElement | HTMLCanvasElement | Uint8Array, options?: { density?: number }): Promise<void>`
 
 Sends print data to the printer.
 
 - If `data` is `HTMLImageElement` or `HTMLCanvasElement`, it will be automatically resized to 384px width, converted to grayscale, and dithered.
 - If `data` is a `Uint8Array`, it is treated as raw 1-bit-per-pixel binary data (must be a multiple of 48 bytes).
+- `options.density`: Optional density setting from `1` (lightest) to `7` (darkest). If provided, it automatically sends a density configuration command before printing. It intelligently skips sending the command if the printer is already set to the desired density.
+
+#### `setDensity(density: number): Promise<void>`
+
+Directly changes the print density. `density` must be a number between `1` and `7`.
 
 #### `disconnect(): void`
 
@@ -88,6 +93,7 @@ Disconnects the current GATT connection.
 - `isOutOfPaper`: boolean
 - `isOverheat`: boolean
 - `isLowBattery`: boolean
+- `density`: number (1-7) representing the current hardware density level
 
 ## Acknowledgments
 

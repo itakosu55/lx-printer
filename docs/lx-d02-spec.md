@@ -80,7 +80,7 @@ The printer asynchronously notifies its own status.
 
   - `Byte[6]`: Low battery flag (`0`: Normal, `1`: Low)
 
-  - `Byte[7]`: Print Density
+  - `Byte[7]`: Print Density (`0x00` (Lightest) to `0x06` (Darkest))
 
   - `Byte[8]-[9]`: Voltage (millivolts, 16-bit Big Endian)
 
@@ -144,3 +144,15 @@ During the image data transfer (Stage 2), the printer may request a retransmissi
 Upon receiving this packet, the host should immediately stop the current transfer and resume sending data packets starting from the specified sequence number (or `Seq - 1` depending on implementation observed in official apps).
 
 _Note: In analyzed official app logs, a request with `0x0075` triggered retransmission from sequence `116 (0x74)`, suggesting the printer might indicate the next expected 1-based index, while the host uses 0-based indices._
+
+### 2.5. Print Density Setting
+
+The host can change the print density (darkness) by sending a command before the print job. The density value is defined between `0x00` (lightest) and `0x06` (darkest).
+
+- **Host -> Printer**: `[0x5A, 0x0C, Density]`
+  - `Density`: `0x00` to `0x06`
+
+The printer will return an ACK upon receiving the command.
+
+- **Printer -> Host**: `[0x5A, 0x0C, Density, 0x3F, 0x01, ...]`
+  - _Note: The values after `Byte[2]` (like `0x3F, 0x01`) might vary, so validating `0x5A, 0x0C` is sufficient to confirm the ACK._

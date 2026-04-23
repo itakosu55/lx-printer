@@ -111,4 +111,97 @@ describe('LXD02Printer Authentication & Print Completion', () => {
     expect(mockPrintResolver).toHaveBeenCalledOnce();
     expect(printer.printResolver).toBeUndefined();
   });
+
+  describe('setDensity', () => {
+    it('should send density command and resolve on ACK', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const printer = new LXD02Printer() as any;
+      const mockTx = {
+        writeValueWithoutResponse: vi.fn().mockResolvedValue(undefined),
+      };
+      printer.tx = mockTx;
+
+      // Initialize status to verify cache update
+      printer.status = {
+        battery: 100,
+        isOutOfPaper: false,
+        isCharging: false,
+        isOverheat: false,
+        isLowBattery: false,
+        density: 4,
+        voltage: 4000,
+      };
+
+      const densityPromise = printer.setDensity(7);
+
+      // Simulate ACK (5a 0c 06 ...)
+      const mockValue = new Uint8Array([0x5a, 0x0c, 0x06, 0x3f, 0x01]);
+      await printer.handleNotifications({
+        target: {
+          value: {
+            buffer: mockValue.buffer,
+            byteOffset: 0,
+            byteLength: mockValue.length,
+          },
+        },
+      });
+
+      await expect(densityPromise).resolves.toBeUndefined();
+      expect(mockTx.writeValueWithoutResponse).toHaveBeenCalledWith(
+        new Uint8Array([0x5a, 0x0c, 0x06])
+      );
+      // Cache should be updated to 7
+      expect(printer.status?.density).toBe(7);
+    });
+
+    it('should throw error for invalid density values', async () => {
+      const printer = new LXD02Printer();
+      await expect(printer.setDensity(0)).rejects.toThrow(
+        'Density must be between 1 and 7'
+      );
+      await expect(printer.setDensity(8)).rejects.toThrow(
+        'Density must be between 1 and 7'
+      );
+      await expect(printer.setDensity(2.5)).rejects.toThrow(
+        'Density must be an integer between 1 and 7'
+      );
+    });
+
+    it('should throw error if density setting is already in progress', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const printer = new LXD02Printer() as any;
+      printer.tx = {
+        writeValueWithoutResponse: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const p1 = printer.setDensity(4);
+      await expect(printer.setDensity(5)).rejects.toThrow(
+        'Density setting is already in progress'
+      );
+
+      // Clean up by simulating ACK
+      const mockValue = new Uint8Array([0x5a, 0x0c, 0x03]);
+      await printer.handleNotifications({
+        target: {
+          value: {
+            buffer: mockValue.buffer,
+            byteOffset: 0,
+            byteLength: mockValue.length,
+          },
+        },
+      });
+      await p1;
+    });
+
+    it('should skip command if density is already set', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const printer = new LXD02Printer() as any;
+      const mockTx = { writeValueWithoutResponse: vi.fn() };
+      printer.tx = mockTx;
+      printer.status = { density: 4 };
+
+      await printer.setDensity(4);
+      expect(mockTx.writeValueWithoutResponse).not.toHaveBeenCalled();
+    });
+  });
 });
