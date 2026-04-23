@@ -11,6 +11,7 @@ export interface PrinterStatus {
   isCharging: boolean;
   isOverheat: boolean;
   isLowBattery: boolean;
+  density: number;
   voltage: number;
 }
 
@@ -23,6 +24,7 @@ export class LXD02Printer {
   private onStatusChange?: (status: PrinterStatus) => void;
   private authResolver?: (result: boolean) => void;
   private printResolver?: () => void;
+  private densityResolver?: (success: boolean) => void;
   private _onRetransmitRequested?: (index: number) => Promise<void> | void;
   private _resendRequestedIndex: number | null = null;
   private boundHandleNotifications: ((event: Event) => void) | null = null;
@@ -115,10 +117,45 @@ export class LXD02Printer {
     });
   }
 
+  async setDensity(density: number): Promise<void> {
+    if (density < 1 || density > 7) {
+      throw new Error('Density must be between 1 and 7');
+    }
+
+    // Skip if density is already set to the target value
+    if (this.status && this.status.density === density) {
+      return;
+    }
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.densityResolver = undefined;
+        reject(new Error('Density setting timeout'));
+      }, 5000);
+
+      this.densityResolver = (success) => {
+        clearTimeout(timeout);
+        if (success) resolve();
+        else reject(new Error('Failed to set density'));
+      };
+
+      this.sendRaw(new Uint8Array([0x5a, 0x0c, density - 1])).catch((err) => {
+        clearTimeout(timeout);
+        this.densityResolver = undefined;
+        reject(err);
+      });
+    });
+  }
+
   async print(
-    data: HTMLImageElement | HTMLCanvasElement | Uint8Array
+    data: HTMLImageElement | HTMLCanvasElement | Uint8Array,
+    options?: { density?: number }
   ): Promise<void> {
     if (!this.tx) throw new Error('Printer not connected');
+
+    if (options?.density !== undefined) {
+      await this.setDensity(options.density);
+    }
 
     const packets = processImage(data);
     const packetCount = packets.length;
@@ -247,6 +284,13 @@ export class LXD02Printer {
         }
         break;
 
+      case 0x0c: // Density setting ACK
+        if (this.densityResolver) {
+          this.densityResolver(true);
+          this.densityResolver = undefined;
+        }
+        break;
+
       case 0x05: // Retransmission Request
         if (value.length >= 4) {
           const seq = (value[2]! << 8) | value[3]!;
@@ -271,6 +315,7 @@ export class LXD02Printer {
             isCharging: value[4] === 0x01,
             isOverheat: value[5] === 0x01,
             isLowBattery: value[6] === 0x01,
+            density: value[7]! + 1,
             voltage: (value[8]! << 8) | value[9]!,
           };
           this.status = status;
