@@ -88,20 +88,28 @@ export class LXD02Printer {
             await new Promise((resolve) => setTimeout(resolve, 300));
           }
 
-          // Service discovery can hang on Windows, so we wrap it in a timeout
-          const service = await Promise.race([
-            server!.getPrimaryService(SERVICE_UUID),
-            new Promise<never>((_, reject) =>
-              setTimeout(
-                () => reject(new Error('getPrimaryService timeout')),
-                5000
-              )
-            ),
-          ]);
+          let timeoutId: ReturnType<typeof setTimeout> | undefined;
+          try {
+            await Promise.race([
+              (async () => {
+                const service = await server!.getPrimaryService(SERVICE_UUID);
+                this.tx = await service.getCharacteristic(CHR_TX_UUID);
+                this.rx = await service.getCharacteristic(CHR_RX_UUID);
+              })(),
+              new Promise<never>((_, reject) => {
+                timeoutId = setTimeout(
+                  () => reject(new Error('Discovery timeout')),
+                  5000
+                );
+              }),
+            ]);
+            break; // Success
+          } finally {
+            if (timeoutId) {
+              clearTimeout(timeoutId);
+            }
+          }
 
-          this.tx = await service.getCharacteristic(CHR_TX_UUID);
-          this.rx = await service.getCharacteristic(CHR_RX_UUID);
-          break; // Success
         } catch (error) {
           if (attempt === MAX_ATTEMPTS) throw error;
           await new Promise((resolve) => setTimeout(resolve, 1500));
