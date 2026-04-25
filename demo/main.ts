@@ -71,9 +71,6 @@ btnConnect.addEventListener('click', async () => {
   if (isConnected && printer) {
     log('Disconnecting...');
     printer.disconnect();
-    isConnected = false;
-    updateUI();
-    log('Disconnected.', 'info');
     return;
   }
 
@@ -85,8 +82,23 @@ btnConnect.addEventListener('click', async () => {
 
     printer = new LXD02Printer({
       onStatusChange: (status) => {
-        statBattery.textContent = `${status.battery}%`;
-        statVoltage.textContent = `${status.voltage} mV`;
+        if (isConnected !== status.isConnected) {
+          isConnected = status.isConnected;
+          updateUI();
+          if (!isConnected) {
+            log('Printer disconnected.', 'error');
+          }
+        }
+
+        if (!status.isConnected) return;
+
+        if (status.battery !== undefined) {
+          statBattery.textContent = `${status.battery}%`;
+        }
+        if (status.voltage !== undefined) {
+          statVoltage.textContent = `${status.voltage} mV`;
+        }
+
         statCharging.textContent = status.isCharging ? 'Yes' : 'No';
         statCharging.style.color = status.isCharging
           ? 'var(--success)'
@@ -101,13 +113,13 @@ btnConnect.addEventListener('click', async () => {
         statFlags.style.color =
           flags.length > 0 ? 'var(--error)' : 'var(--success)';
 
-        statDensity.textContent = status.density.toString();
+        if (status.density !== undefined) {
+          statDensity.textContent = status.density.toString();
+        }
       },
     });
 
     await printer.connect();
-    isConnected = true;
-    updateUI();
     log('Printer connected and authenticated!', 'success');
   } catch (err) {
     handleError(err, 'Connection failed');

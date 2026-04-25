@@ -29,7 +29,15 @@ import { LXD02Printer } from 'lx-printer/lx-d02';
 
 const printer = new LXD02Printer({
   onStatusChange: (status) => {
-    console.log(`Battery: ${status.battery}%`);
+    if (status.isConnected) {
+      if (status.battery !== undefined) {
+        console.log(`Battery: ${status.battery}%`);
+      } else {
+        console.log('Battery: checking...');
+      }
+    } else {
+      console.log('Printer disconnected');
+    }
     if (status.isOutOfPaper) {
       console.error('Out of paper!');
     }
@@ -90,6 +98,7 @@ Disconnects the current GATT connection.
 
 ### `PrinterStatus`
 
+- `isConnected`: boolean (Indicates whether the printer is currently connected via Bluetooth)
 - `isPrinting`: boolean (Indicates whether a print job is currently in progress)
 - `battery`?: number (0-100)
 - `voltage`?: number (mV)
