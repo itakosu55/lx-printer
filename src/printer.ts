@@ -24,9 +24,10 @@ export class LXD02Printer {
   private status: PrinterStatus | null = null;
 
   private onStatusChange?: (status: PrinterStatus) => void;
-  private authResolver?: (result: boolean) => void;
+  private authResolver?: (result: boolean, error?: Error) => void;
   private printResolver?: () => void;
-  private densityResolver?: (success: boolean) => void;
+  private printRejecter?: (error: Error) => void;
+  private densityResolver?: (success: boolean, error?: Error) => void;
   private _onRetransmitRequested?: (index: number) => Promise<void> | void;
   private _resendRequestedIndex: number | null = null;
   private boundHandleNotifications: ((event: Event) => void) | null = null;
@@ -48,6 +49,14 @@ export class LXD02Printer {
         filters: [{ namePrefix: 'LX' }],
         optionalServices: [SERVICE_UUID],
       });
+
+      // Remove existing listener if any (e.g. from a previous failed/incomplete connection)
+      if (this.boundHandleDisconnect) {
+        this.device.removeEventListener(
+          'gattserverdisconnected',
+          this.boundHandleDisconnect
+        );
+      }
 
       this.boundHandleDisconnect = () => this.handleDisconnect();
       this.device.addEventListener(
@@ -84,6 +93,14 @@ export class LXD02Printer {
       };
       this.notifyStatus();
     } catch (error) {
+      if (this.device && this.boundHandleDisconnect) {
+        this.device.removeEventListener(
+          'gattserverdisconnected',
+          this.boundHandleDisconnect
+        );
+        this.boundHandleDisconnect = null;
+      }
+
       if (this.rx && this.boundHandleNotifications) {
         this.rx.removeEventListener(
           'characteristicvaluechanged',
@@ -118,10 +135,11 @@ export class LXD02Printer {
         reject(new Error('Authentication timeout'));
       }, 10000);
 
-      this.authResolver = (success) => {
+      this.authResolver = (success, err) => {
         clearTimeout(timeout);
+        this.authResolver = undefined;
         if (success) resolve();
-        else reject(new Error('Authentication failed'));
+        else reject(err || new Error('Authentication failed'));
       };
 
       // Stage 0: Initiate Authentication
@@ -158,7 +176,7 @@ export class LXD02Printer {
         reject(new Error('Density setting timeout'));
       }, 5000);
 
-      this.densityResolver = (success) => {
+      this.densityResolver = (success, err) => {
         clearTimeout(timeout);
         this.densityResolver = undefined;
         if (success) {
@@ -167,7 +185,7 @@ export class LXD02Printer {
           }
           resolve();
         } else {
-          reject(new Error('Failed to set density'));
+          reject(err || new Error('Failed to set density'));
         }
       };
 
@@ -216,8 +234,18 @@ export class LXD02Printer {
 
         this.printResolver = () => {
           clearTimeout(timeout);
+          this.printResolver = undefined;
+          this.printRejecter = undefined;
           this._onRetransmitRequested = undefined;
           resolve();
+        };
+
+        this.printRejecter = (err) => {
+          clearTimeout(timeout);
+          this.printResolver = undefined;
+          this.printRejecter = undefined;
+          this._onRetransmitRequested = undefined;
+          reject(err);
         };
 
         const sendPacketsFrom = async (startIndex: number) => {
@@ -276,6 +304,7 @@ export class LXD02Printer {
           .catch((err) => {
             clearTimeout(timeout);
             this.printResolver = undefined;
+            this.printRejecter = undefined;
             this._onRetransmitRequested = undefined;
             reject(err);
           });
@@ -417,6 +446,15 @@ export class LXD02Printer {
       this.boundHandleDisconnect = null;
     }
 
+    if (this.device?.gatt?.connected) {
+      this.device.gatt.disconnect();
+    }
+
+    this.handleDisconnect();
+  }
+
+  private handleDisconnect() {
+    // 1. Cleanup notification listeners before clearing references
     if (this.rx && this.boundHandleNotifications) {
       this.rx.removeEventListener(
         'characteristicvaluechanged',
@@ -426,19 +464,26 @@ export class LXD02Printer {
       this.boundHandleNotifications = null;
     }
 
-    if (this.device?.gatt?.connected) {
-      this.device.gatt.disconnect();
+    // 2. Reject in-flight operations
+    const disconnectError = new Error('Printer disconnected');
+    if (this.authResolver) {
+      this.authResolver(false, disconnectError);
+    }
+    if (this.densityResolver) {
+      this.densityResolver(false, disconnectError);
+    }
+    if (this.printRejecter) {
+      this.printRejecter(disconnectError);
     }
 
-    this.handleDisconnect();
-  }
-
-  private handleDisconnect() {
+    // 3. Update status
     if (this.status) {
       this.status.isConnected = false;
       this.status.isPrinting = false;
       this.notifyStatus();
     }
+
+    // 4. Clear references
     this.tx = null;
     this.rx = null;
   }
