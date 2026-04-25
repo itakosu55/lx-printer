@@ -64,12 +64,65 @@ export class LXD02Printer {
         this.boundHandleDisconnect
       );
 
-      const server = await this.device.gatt?.connect();
+      let server = await this.device.gatt?.connect();
       if (!server) throw new Error('Failed to connect to GATT server');
 
-      const service = await server.getPrimaryService(SERVICE_UUID);
-      this.tx = await service.getCharacteristic(CHR_TX_UUID);
-      this.rx = await service.getCharacteristic(CHR_RX_UUID);
+      // Universal stabilization delay after GATT connection
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      // Discovery with retries
+      // On Windows, getPrimaryService often hangs from the 3rd attempt onwards
+      // if the connection is unstable. We set MAX_ATTEMPTS to 3 and use a timeout
+      // to catch these hangs.
+      const MAX_ATTEMPTS = 3;
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        try {
+          if (!this.device?.gatt?.connected) {
+            try {
+              this.device?.gatt?.disconnect();
+            } catch {
+              // Best effort
+            }
+            server = await this.device?.gatt?.connect();
+            if (!server) throw new Error('Failed to reconnect to GATT server');
+            await new Promise((resolve) => setTimeout(resolve, 300));
+          }
+
+          let timeoutId: ReturnType<typeof setTimeout> | undefined;
+          try {
+            await Promise.race([
+              (async () => {
+                const service = await server!.getPrimaryService(SERVICE_UUID);
+                this.tx = await service.getCharacteristic(CHR_TX_UUID);
+                this.rx = await service.getCharacteristic(CHR_RX_UUID);
+              })(),
+              new Promise<never>((_, reject) => {
+                timeoutId = setTimeout(
+                  () => reject(new Error('Discovery timeout')),
+                  5000
+                );
+              }),
+            ]);
+            break; // Success
+          } finally {
+            if (timeoutId) {
+              clearTimeout(timeoutId);
+            }
+          }
+        } catch (error) {
+          try {
+            this.device?.gatt?.disconnect();
+          } catch {
+            // Best effort
+          }
+          if (attempt === MAX_ATTEMPTS) throw error;
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+        }
+      }
+
+      if (!this.rx || !this.tx) {
+        throw new Error('Failed to retrieve characteristics');
+      }
 
       // Start listening for notifications
       await this.rx.startNotifications();
@@ -112,10 +165,9 @@ export class LXD02Printer {
         try {
           await this.rx.stopNotifications();
         } catch {
-          // Best-effort cleanup; preserve the original error.
+          // Best-effort cleanup
         }
       }
-
       if (this.device?.gatt?.connected) {
         this.device.gatt.disconnect();
       }
