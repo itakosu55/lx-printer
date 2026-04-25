@@ -67,7 +67,7 @@ export class LXD02Printer {
       let server = await this.device.gatt?.connect();
       if (!server) throw new Error('Failed to connect to GATT server');
 
-      // Windows 11 / Chrome stabilization delay
+      // Universal stabilization delay after GATT connection
       await new Promise((resolve) => setTimeout(resolve, 300));
 
       // Discovery with retries
