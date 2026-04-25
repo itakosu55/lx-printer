@@ -139,7 +139,6 @@ export class LXD02Printer {
         this.boundHandleDisconnect = null;
       }
 
-
       if (this.rx && this.boundHandleNotifications) {
         this.rx.removeEventListener(
           'characteristicvaluechanged',
