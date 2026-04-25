@@ -99,7 +99,6 @@ export class LXD02Printer {
             ),
           ]);
 
-
           this.tx = await service.getCharacteristic(CHR_TX_UUID);
           this.rx = await service.getCharacteristic(CHR_RX_UUID);
           break; // Success
