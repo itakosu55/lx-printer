@@ -109,7 +109,6 @@ export class LXD02Printer {
               clearTimeout(timeoutId);
             }
           }
-
         } catch (error) {
           try {
             this.device?.gatt?.disconnect();
@@ -119,7 +118,6 @@ export class LXD02Printer {
           if (attempt === MAX_ATTEMPTS) throw error;
           await new Promise((resolve) => setTimeout(resolve, 1500));
         }
-
       }
 
       if (!this.rx || !this.tx) {
@@ -170,7 +168,6 @@ export class LXD02Printer {
           // Best-effort cleanup
         }
       }
-
       if (this.device?.gatt?.connected) {
         this.device.gatt.disconnect();
       }
