@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { LXD02Printer, PrinterStatus } from './printer';
 
 describe('LXD02Printer Authentication & Print Completion', () => {
@@ -410,6 +410,142 @@ describe('LXD02Printer Authentication & Print Completion', () => {
       printer.handleDisconnect();
 
       await expect(printPromise).rejects.toThrow('Printer disconnected');
+    });
+  });
+
+  describe('Connection Robustness (Retries & Timeouts)', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let originalBluetooth: any;
+
+    beforeEach(() => {
+      originalBluetooth = global.navigator.bluetooth;
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (global.navigator as any).bluetooth = originalBluetooth;
+      vi.useRealTimers();
+    });
+
+    it('should retry and succeed if discovery fails initially', async () => {
+      const mockCharacteristic = {
+        startNotifications: vi.fn().mockResolvedValue(undefined),
+        addEventListener: vi.fn(),
+      };
+      const mockService = {
+        getCharacteristic: vi.fn().mockResolvedValue(mockCharacteristic),
+      };
+      const mockServer = {
+        connect: vi.fn().mockImplementation(async () => mockServer),
+        disconnect: vi.fn(),
+        getPrimaryService: vi
+          .fn()
+          .mockRejectedValueOnce(new Error('GATT Error'))
+          .mockResolvedValueOnce(mockService),
+        connected: true,
+      };
+      const mockDevice = {
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        gatt: mockServer,
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (global.navigator as any).bluetooth = {
+        requestDevice: vi.fn().mockResolvedValue(mockDevice),
+      };
+
+      const printer = new LXD02Printer();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (printer as any).authenticate = vi.fn().mockResolvedValue(undefined);
+
+      const connectPromise = printer.connect();
+
+      // Handle stabilization delay (300ms) and retry delay (1500ms)
+      await vi.runAllTimersAsync();
+
+      await connectPromise;
+
+      expect(mockServer.getPrimaryService).toHaveBeenCalledTimes(2);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect((printer as any).status.isConnected).toBe(true);
+    });
+
+    it('should retry and succeed if discovery hangs (timeout)', async () => {
+      const mockCharacteristic = {
+        startNotifications: vi.fn().mockResolvedValue(undefined),
+        addEventListener: vi.fn(),
+      };
+      const mockService = {
+        getCharacteristic: vi.fn().mockResolvedValue(mockCharacteristic),
+      };
+      const mockServer = {
+        connect: vi.fn().mockImplementation(async () => mockServer),
+        disconnect: vi.fn(),
+        getPrimaryService: vi
+          .fn()
+          // First call hangs
+          .mockReturnValueOnce(new Promise(() => {}))
+          // Second call succeeds
+          .mockResolvedValueOnce(mockService),
+        connected: true,
+      };
+      const mockDevice = {
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        gatt: mockServer,
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (global.navigator as any).bluetooth = {
+        requestDevice: vi.fn().mockResolvedValue(mockDevice),
+      };
+
+      const printer = new LXD02Printer();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (printer as any).authenticate = vi.fn().mockResolvedValue(undefined);
+
+      const connectPromise = printer.connect();
+
+      // Fast-forward to trigger 5s timeout and 1.5s backoff
+      await vi.runAllTimersAsync();
+
+      await connectPromise;
+
+      expect(mockServer.getPrimaryService).toHaveBeenCalledTimes(2);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect((printer as any).status.isConnected).toBe(true);
+    });
+
+    it('should fail after maximum retry attempts', async () => {
+      const mockServer = {
+        connect: vi.fn().mockImplementation(async () => mockServer),
+        disconnect: vi.fn(),
+        getPrimaryService: vi
+          .fn()
+          .mockRejectedValue(new Error('Persistent Error')),
+        connected: true,
+      };
+      const mockDevice = {
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        gatt: mockServer,
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (global.navigator as any).bluetooth = {
+        requestDevice: vi.fn().mockResolvedValue(mockDevice),
+      };
+
+      const printer = new LXD02Printer();
+
+      const connectPromise = printer.connect();
+
+      await vi.runAllTimersAsync();
+
+      await expect(connectPromise).rejects.toThrow('Persistent Error');
+      expect(mockServer.getPrimaryService).toHaveBeenCalledTimes(3);
     });
   });
 });
