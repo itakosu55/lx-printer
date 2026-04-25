@@ -30,7 +30,11 @@ import { LXD02Printer } from 'lx-printer/lx-d02';
 const printer = new LXD02Printer({
   onStatusChange: (status) => {
     if (status.isConnected) {
-      console.log(`Battery: ${status.battery}%`);
+      if (status.battery !== undefined) {
+        console.log(`Battery: ${status.battery}%`);
+      } else {
+        console.log('Battery: checking...');
+      }
     } else {
       console.log('Printer disconnected');
     }
