@@ -6,13 +6,14 @@ const CHR_TX_UUID = 0xffe1; // Write Without Response
 const CHR_RX_UUID = 0xffe2; // Notify
 
 export interface PrinterStatus {
-  battery: number;
-  isOutOfPaper: boolean;
-  isCharging: boolean;
-  isOverheat: boolean;
-  isLowBattery: boolean;
-  density: number;
-  voltage: number;
+  battery?: number;
+  isOutOfPaper?: boolean;
+  isCharging?: boolean;
+  isOverheat?: boolean;
+  isLowBattery?: boolean;
+  density?: number;
+  voltage?: number;
+  isPrinting: boolean;
 }
 
 export class LXD02Printer {
@@ -169,14 +170,28 @@ export class LXD02Printer {
   ): Promise<void> {
     if (!this.tx) throw new Error('Printer not connected');
 
-    if (options?.density !== undefined) {
-      await this.setDensity(options.density);
+    if (this.status?.isPrinting) {
+      throw new Error('Printer is already printing');
     }
 
-    const packets = processImage(data);
-    const packetCount = packets.length;
+    if (!this.status) {
+      this.status = {
+        isPrinting: false,
+      };
+    }
 
-    return new Promise((resolve, reject) => {
+    this.status.isPrinting = true;
+    this.onStatusChange?.(this.status);
+
+    try {
+      if (options?.density !== undefined) {
+        await this.setDensity(options.density);
+      }
+
+      const packets = processImage(data);
+      const packetCount = packets.length;
+
+      await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.printResolver = undefined;
         this._onRetransmitRequested = undefined;
@@ -240,15 +255,21 @@ export class LXD02Printer {
         }
       };
 
-      this.sendRaw(startCmd)
-        .then(() => sendPacketsFrom(0))
-        .catch((err) => {
-          clearTimeout(timeout);
-          this.printResolver = undefined;
-          this._onRetransmitRequested = undefined;
-          reject(err);
-        });
-    });
+        this.sendRaw(startCmd)
+          .then(() => sendPacketsFrom(0))
+          .catch((err) => {
+            clearTimeout(timeout);
+            this.printResolver = undefined;
+            this._onRetransmitRequested = undefined;
+            reject(err);
+          });
+      });
+    } finally {
+      if (this.status) {
+        this.status.isPrinting = false;
+        this.onStatusChange?.(this.status);
+      }
+    }
   }
 
   private async handleNotifications(event: Event) {
@@ -332,6 +353,7 @@ export class LXD02Printer {
             isLowBattery: value[6] === 0x01,
             density: value[7]! + 1,
             voltage: (value[8]! << 8) | value[9]!,
+            isPrinting: this.status?.isPrinting ?? false,
           };
           this.status = status;
           this.onStatusChange?.(status);

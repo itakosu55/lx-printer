@@ -77,6 +77,9 @@ Sends print data to the printer.
 - If `data` is a `Uint8Array`, it is treated as raw 1-bit-per-pixel binary data (must be a multiple of 48 bytes).
 - `options.density`: Optional density setting from `1` (lightest) to `7` (darkest). If provided, it automatically sends a density configuration command before printing. It intelligently skips sending the command if the printer is already set to the desired density.
 
+> [!WARNING]
+> The printer does not support concurrent print jobs. If `print()` is called while another print job is in progress, it will immediately throw an error (`Printer is already printing`). You can check the current printing status via `PrinterStatus.isPrinting`.
+
 #### `setDensity(density: number): Promise<void>`
 
 Directly changes the print density. `density` must be a number between `1` and `7`.
@@ -87,13 +90,14 @@ Disconnects the current GATT connection.
 
 ### `PrinterStatus`
 
-- `battery`: number (0-100)
-- `voltage`: number (mV)
-- `isCharging`: boolean
-- `isOutOfPaper`: boolean
-- `isOverheat`: boolean
-- `isLowBattery`: boolean
-- `density`: number (1-7) representing the current hardware density level
+- `isPrinting`: boolean (Indicates whether a print job is currently in progress)
+- `battery`?: number (0-100)
+- `voltage`?: number (mV)
+- `isCharging`?: boolean
+- `isOutOfPaper`?: boolean
+- `isOverheat`?: boolean
+- `isLowBattery`?: boolean
+- `density`?: number (1-7) representing the current hardware density level
 
 ## Acknowledgments
 
