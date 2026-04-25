@@ -111,9 +111,15 @@ export class LXD02Printer {
           }
 
         } catch (error) {
+          try {
+            this.device?.gatt?.disconnect();
+          } catch {
+            // Best effort
+          }
           if (attempt === MAX_ATTEMPTS) throw error;
           await new Promise((resolve) => setTimeout(resolve, 1500));
         }
+
       }
 
       if (!this.rx || !this.tx) {
