@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { LXD02Printer } from './printer';
+import { LXD02Printer, PrinterStatus } from './printer';
 
 describe('LXD02Printer Authentication & Print Completion', () => {
   it('should complete authentication sequence correctly', async () => {
@@ -214,8 +214,8 @@ describe('LXD02Printer Authentication & Print Completion', () => {
       };
       printer.tx = mockTx;
 
-      const statusChanges: any[] = [];
-      printer.onStatusChange = (s: any) => statusChanges.push(s);
+      const statusChanges: PrinterStatus[] = [];
+      printer.onStatusChange = (s: PrinterStatus) => statusChanges.push(s);
 
       // Start printing
       const printPromise = printer.print(new Uint8Array(48 * 2));
@@ -252,9 +252,9 @@ describe('LXD02Printer Authentication & Print Completion', () => {
     it('should provide a defensive copy to onStatusChange', async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const printer = new LXD02Printer() as any;
-      let receivedStatus: any = null;
+      let receivedStatus: PrinterStatus | null = null;
 
-      printer.onStatusChange = (s: any) => {
+      printer.onStatusChange = (s: PrinterStatus) => {
         receivedStatus = s;
         // Attempt to mutate the received status
         s.isPrinting = !s.isPrinting;
@@ -277,7 +277,7 @@ describe('LXD02Printer Authentication & Print Completion', () => {
 
       // Internal status should remain unaffected by the consumer's mutation
       expect(printer.status.battery).toBe(0x50);
-      expect(printer.status.battery).not.toBe(receivedStatus.battery);
+      expect(printer.status.battery).not.toBe(receivedStatus!.battery);
       expect(printer.status.isPrinting).toBe(false);
     });
   });
