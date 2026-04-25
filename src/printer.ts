@@ -6,6 +6,7 @@ const CHR_TX_UUID = 0xffe1; // Write Without Response
 const CHR_RX_UUID = 0xffe2; // Notify
 
 export interface PrinterStatus {
+  isConnected: boolean;
   battery?: number;
   isOutOfPaper?: boolean;
   isCharging?: boolean;
@@ -29,6 +30,7 @@ export class LXD02Printer {
   private _onRetransmitRequested?: (index: number) => Promise<void> | void;
   private _resendRequestedIndex: number | null = null;
   private boundHandleNotifications: ((event: Event) => void) | null = null;
+  private boundHandleDisconnect: (() => void) | null = null;
 
   constructor(options?: { onStatusChange?: (status: PrinterStatus) => void }) {
     this.onStatusChange = options?.onStatusChange;
@@ -46,6 +48,12 @@ export class LXD02Printer {
         filters: [{ namePrefix: 'LX' }],
         optionalServices: [SERVICE_UUID],
       });
+
+      this.boundHandleDisconnect = () => this.handleDisconnect();
+      this.device.addEventListener(
+        'gattserverdisconnected',
+        this.boundHandleDisconnect
+      );
 
       const server = await this.device.gatt?.connect();
       if (!server) throw new Error('Failed to connect to GATT server');
@@ -68,6 +76,13 @@ export class LXD02Printer {
 
       // Start Authentication
       await this.authenticate();
+
+      this.status = {
+        ...(this.status ?? {}),
+        isConnected: true,
+        isPrinting: false,
+      };
+      this.notifyStatus();
     } catch (error) {
       if (this.rx && this.boundHandleNotifications) {
         this.rx.removeEventListener(
@@ -176,11 +191,13 @@ export class LXD02Printer {
 
     if (!this.status) {
       this.status = {
+        isConnected: true,
         isPrinting: false,
       };
     }
 
-    this.status.isPrinting = true;
+    const currentStatus = this.status;
+    currentStatus.isPrinting = true;
     try {
       this.notifyStatus();
       if (options?.density !== undefined) {
@@ -345,6 +362,7 @@ export class LXD02Printer {
       case 0x02: // Status
         if (value.length >= 12) {
           const status: PrinterStatus = {
+            isConnected: true,
             battery: value[2]!,
             isOutOfPaper: value[3] === 0x01,
             isCharging: value[4] === 0x01,
@@ -391,6 +409,14 @@ export class LXD02Printer {
   }
 
   disconnect(): void {
+    if (this.device && this.boundHandleDisconnect) {
+      this.device.removeEventListener(
+        'gattserverdisconnected',
+        this.boundHandleDisconnect
+      );
+      this.boundHandleDisconnect = null;
+    }
+
     if (this.rx && this.boundHandleNotifications) {
       this.rx.removeEventListener(
         'characteristicvaluechanged',
@@ -399,9 +425,22 @@ export class LXD02Printer {
       this.rx.stopNotifications().catch(() => {});
       this.boundHandleNotifications = null;
     }
+
     if (this.device?.gatt?.connected) {
       this.device.gatt.disconnect();
     }
+
+    this.handleDisconnect();
+  }
+
+  private handleDisconnect() {
+    if (this.status) {
+      this.status.isConnected = false;
+      this.status.isPrinting = false;
+      this.notifyStatus();
+    }
+    this.tx = null;
+    this.rx = null;
   }
 
   private notifyStatus(): void {

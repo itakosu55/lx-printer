@@ -123,6 +123,7 @@ describe('LXD02Printer Authentication & Print Completion', () => {
 
       // Initialize status to verify cache update
       printer.status = {
+        isConnected: true,
         battery: 100,
         isOutOfPaper: false,
         isCharging: false,
@@ -130,6 +131,7 @@ describe('LXD02Printer Authentication & Print Completion', () => {
         isLowBattery: false,
         density: 4,
         voltage: 4000,
+        isPrinting: false,
       };
 
       const densityPromise = printer.setDensity(7);
@@ -198,7 +200,7 @@ describe('LXD02Printer Authentication & Print Completion', () => {
       const printer = new LXD02Printer() as any;
       const mockTx = { writeValueWithoutResponse: vi.fn() };
       printer.tx = mockTx;
-      printer.status = { density: 4 };
+      printer.status = { isConnected: true, density: 4, isPrinting: false };
 
       await printer.setDensity(4);
       expect(mockTx.writeValueWithoutResponse).not.toHaveBeenCalled();
@@ -314,6 +316,80 @@ describe('LXD02Printer Authentication & Print Completion', () => {
 
       // isPrinting should be false despite the error in notifyStatus
       expect(printer.status.isPrinting).toBe(false);
+    });
+  });
+
+  describe('Disconnection', () => {
+    it('should update isConnected to false on handleDisconnect', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const printer = new LXD02Printer() as any;
+      let lastStatus: PrinterStatus | null = null;
+      printer.onStatusChange = (s: PrinterStatus) => {
+        lastStatus = s;
+      };
+
+      printer.status = { isConnected: true, isPrinting: true };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      printer.tx = {} as any;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      printer.rx = {} as any;
+
+      printer.handleDisconnect();
+
+      expect(printer.status.isConnected).toBe(false);
+      expect(printer.status.isPrinting).toBe(false);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect((lastStatus as any)?.isConnected).toBe(false);
+      expect(printer.tx).toBeNull();
+      expect(printer.rx).toBeNull();
+    });
+
+    it('should register and unregister gattserverdisconnected listener', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const printer = new LXD02Printer() as any;
+      const mockDevice = {
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        gatt: { connect: vi.fn().mockResolvedValue({}) },
+      };
+
+      // Mock navigator.bluetooth
+      const originalBluetooth = global.navigator.bluetooth;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (global.navigator as any).bluetooth = {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        requestDevice: vi.fn().mockResolvedValue(mockDevice as any),
+      };
+
+      // Mock other methods to prevent full connection flow
+      printer.getPrimaryService = vi.fn().mockResolvedValue({});
+      printer.authenticate = vi.fn().mockResolvedValue(undefined);
+
+      try {
+        await printer.connect();
+      } catch {
+        // Expected to fail in getPrimaryService mock but we care about listener
+      }
+
+      expect(mockDevice.addEventListener).toHaveBeenCalledWith(
+        'gattserverdisconnected',
+        expect.any(Function)
+      );
+
+      const listener = mockDevice.addEventListener.mock.calls[0][1];
+      printer.boundHandleDisconnect = listener;
+      printer.device = mockDevice;
+
+      printer.disconnect();
+
+      expect(mockDevice.removeEventListener).toHaveBeenCalledWith(
+        'gattserverdisconnected',
+        listener
+      );
+
+      // Restore
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (global.navigator as any).bluetooth = originalBluetooth;
     });
   });
 });
