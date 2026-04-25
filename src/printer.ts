@@ -192,68 +192,68 @@ export class LXD02Printer {
       const packetCount = packets.length;
 
       await new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this.printResolver = undefined;
-        this._onRetransmitRequested = undefined;
-        reject(new Error('Print timeout'));
-      }, 30000);
-
-      this.printResolver = () => {
-        clearTimeout(timeout);
-        this._onRetransmitRequested = undefined;
-        resolve();
-      };
-
-      const sendPacketsFrom = async (startIndex: number) => {
-        isSending = true;
-        try {
-          let i = startIndex;
-          while (i < packetCount) {
-            // Check if a retransmission was requested via notification during the loop
-            if (this._resendRequestedIndex !== null) {
-              const target = this._resendRequestedIndex;
-              this._resendRequestedIndex = null;
-              if (target < packetCount) {
-                i = target;
-              }
-            }
-
-            await this.sendRaw(packets[i]!);
-            i++;
-          }
-        } catch (err) {
-          clearTimeout(timeout);
+        const timeout = setTimeout(() => {
           this.printResolver = undefined;
           this._onRetransmitRequested = undefined;
-          reject(err);
-        } finally {
-          isSending = false;
-        }
-      };
+          reject(new Error('Print timeout'));
+        }, 30000);
 
-      // 1. Send Print Start Command
-      // Length = (Total lines rounded up / 2) + 1 (which is packets.length)
-      const startCmd = new Uint8Array([
-        0x5a,
-        0x04,
-        (packetCount >> 8) & 0xff,
-        packetCount & 0xff,
-        0x00,
-        0x00,
-      ]);
+        this.printResolver = () => {
+          clearTimeout(timeout);
+          this._onRetransmitRequested = undefined;
+          resolve();
+        };
 
-      let isSending = false;
+        const sendPacketsFrom = async (startIndex: number) => {
+          isSending = true;
+          try {
+            let i = startIndex;
+            while (i < packetCount) {
+              // Check if a retransmission was requested via notification during the loop
+              if (this._resendRequestedIndex !== null) {
+                const target = this._resendRequestedIndex;
+                this._resendRequestedIndex = null;
+                if (target < packetCount) {
+                  i = target;
+                }
+              }
 
-      this._onRetransmitRequested = async (targetIndex: number) => {
-        if (isSending) {
-          // If a loop is already running, just update the index so the loop will jump backwards.
-          this._resendRequestedIndex = targetIndex;
-        } else {
-          // If the loop finished but we haven't received completion (0x06) yet, start a new loop.
-          this._resendRequestedIndex = null;
-          await sendPacketsFrom(targetIndex);
-        }
-      };
+              await this.sendRaw(packets[i]!);
+              i++;
+            }
+          } catch (err) {
+            clearTimeout(timeout);
+            this.printResolver = undefined;
+            this._onRetransmitRequested = undefined;
+            reject(err);
+          } finally {
+            isSending = false;
+          }
+        };
+
+        // 1. Send Print Start Command
+        // Length = (Total lines rounded up / 2) + 1 (which is packets.length)
+        const startCmd = new Uint8Array([
+          0x5a,
+          0x04,
+          (packetCount >> 8) & 0xff,
+          packetCount & 0xff,
+          0x00,
+          0x00,
+        ]);
+
+        let isSending = false;
+
+        this._onRetransmitRequested = async (targetIndex: number) => {
+          if (isSending) {
+            // If a loop is already running, just update the index so the loop will jump backwards.
+            this._resendRequestedIndex = targetIndex;
+          } else {
+            // If the loop finished but we haven't received completion (0x06) yet, start a new loop.
+            this._resendRequestedIndex = null;
+            await sendPacketsFrom(targetIndex);
+          }
+        };
 
         this.sendRaw(startCmd)
           .then(() => sendPacketsFrom(0))
