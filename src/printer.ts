@@ -181,9 +181,8 @@ export class LXD02Printer {
     }
 
     this.status.isPrinting = true;
-    this.onStatusChange?.({ ...this.status });
-
     try {
+      this.notifyStatus();
       if (options?.density !== undefined) {
         await this.setDensity(options.density);
       }
@@ -267,7 +266,7 @@ export class LXD02Printer {
     } finally {
       if (this.status) {
         this.status.isPrinting = false;
-        this.onStatusChange?.({ ...this.status });
+        this.notifyStatus();
       }
     }
   }
@@ -356,7 +355,7 @@ export class LXD02Printer {
             isPrinting: this.status?.isPrinting ?? false,
           };
           this.status = status;
-          this.onStatusChange?.({ ...status });
+          this.notifyStatus();
         }
         break;
 
@@ -402,6 +401,16 @@ export class LXD02Printer {
     }
     if (this.device?.gatt?.connected) {
       this.device.gatt.disconnect();
+    }
+  }
+
+  private notifyStatus(): void {
+    if (this.onStatusChange && this.status) {
+      try {
+        this.onStatusChange({ ...this.status });
+      } catch (err) {
+        console.error('Unhandled error in onStatusChange callback:', err);
+      }
     }
   }
 }

@@ -280,5 +280,40 @@ describe('LXD02Printer Authentication & Print Completion', () => {
       expect(printer.status.battery).not.toBe(receivedStatus!.battery);
       expect(printer.status.isPrinting).toBe(false);
     });
+
+    it('should reset isPrinting even if onStatusChange callback throws', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const printer = new LXD02Printer() as any;
+      printer.tx = {
+        writeValueWithoutResponse: vi.fn().mockResolvedValue(undefined),
+      };
+
+      // Setup a throwing callback
+      printer.onStatusChange = () => {
+        throw new Error('Consumer error');
+      };
+
+      // Start printing
+      const printPromise = printer.print(new Uint8Array(48));
+
+      expect(printer.status.isPrinting).toBe(true);
+
+      // Simulate completion
+      const mockValue = new Uint8Array([0x5a, 0x06, 0x00, 0x01]);
+      await printer.handleNotifications({
+        target: {
+          value: {
+            buffer: mockValue.buffer,
+            byteOffset: 0,
+            byteLength: mockValue.length,
+          },
+        },
+      });
+
+      await printPromise;
+
+      // isPrinting should be false despite the error in notifyStatus
+      expect(printer.status.isPrinting).toBe(false);
+    });
   });
 });
