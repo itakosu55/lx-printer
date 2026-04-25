@@ -181,7 +181,7 @@ export class LXD02Printer {
     }
 
     this.status.isPrinting = true;
-    this.onStatusChange?.(this.status);
+    this.onStatusChange?.({ ...this.status });
 
     try {
       if (options?.density !== undefined) {
@@ -267,7 +267,7 @@ export class LXD02Printer {
     } finally {
       if (this.status) {
         this.status.isPrinting = false;
-        this.onStatusChange?.(this.status);
+        this.onStatusChange?.({ ...this.status });
       }
     }
   }
@@ -356,7 +356,7 @@ export class LXD02Printer {
             isPrinting: this.status?.isPrinting ?? false,
           };
           this.status = status;
-          this.onStatusChange?.(status);
+          this.onStatusChange?.({ ...status });
         }
         break;
 

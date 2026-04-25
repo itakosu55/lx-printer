@@ -204,4 +204,81 @@ describe('LXD02Printer Authentication & Print Completion', () => {
       expect(mockTx.writeValueWithoutResponse).not.toHaveBeenCalled();
     });
   });
+
+  describe('Concurrency & Defensive Copy', () => {
+    it('should prevent concurrent printing and toggle isPrinting status', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const printer = new LXD02Printer() as any;
+      const mockTx = {
+        writeValueWithoutResponse: vi.fn().mockResolvedValue(undefined),
+      };
+      printer.tx = mockTx;
+
+      const statusChanges: any[] = [];
+      printer.onStatusChange = (s: any) => statusChanges.push(s);
+
+      // Start printing
+      const printPromise = printer.print(new Uint8Array(48 * 2));
+
+      // 1. Verify isPrinting is true and status notification was called
+      expect(printer.status.isPrinting).toBe(true);
+      expect(statusChanges.length).toBeGreaterThan(0);
+      expect(statusChanges[statusChanges.length - 1].isPrinting).toBe(true);
+
+      // 2. Try to start another print (should fail)
+      await expect(printer.print(new Uint8Array(48))).rejects.toThrow(
+        'Printer is already printing'
+      );
+
+      // 3. Complete the first print (simulate completion notification)
+      const mockValue = new Uint8Array([0x5a, 0x06, 0x00, 0x02]);
+      await printer.handleNotifications({
+        target: {
+          value: {
+            buffer: mockValue.buffer,
+            byteOffset: 0,
+            byteLength: mockValue.length,
+          },
+        },
+      });
+
+      await printPromise;
+
+      // 4. Verify isPrinting is false
+      expect(printer.status.isPrinting).toBe(false);
+      expect(statusChanges[statusChanges.length - 1].isPrinting).toBe(false);
+    });
+
+    it('should provide a defensive copy to onStatusChange', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const printer = new LXD02Printer() as any;
+      let receivedStatus: any = null;
+
+      printer.onStatusChange = (s: any) => {
+        receivedStatus = s;
+        // Attempt to mutate the received status
+        s.isPrinting = !s.isPrinting;
+        s.battery = 999;
+      };
+
+      // Trigger status update (0x5A 0x02 ...)
+      const mockValue = new Uint8Array([
+        0x5a, 0x02, 0x50, 0x00, 0x00, 0x00, 0x00, 0x03, 0x10, 0x00, 0x00, 0x00,
+      ]);
+      await printer.handleNotifications({
+        target: {
+          value: {
+            buffer: mockValue.buffer,
+            byteOffset: 0,
+            byteLength: mockValue.length,
+          },
+        },
+      });
+
+      // Internal status should remain unaffected by the consumer's mutation
+      expect(printer.status.battery).toBe(0x50);
+      expect(printer.status.battery).not.toBe(receivedStatus.battery);
+      expect(printer.status.isPrinting).toBe(false);
+    });
+  });
 });
