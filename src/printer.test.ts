@@ -448,9 +448,6 @@ describe('LXD02Printer Authentication & Print Completion', () => {
         connected: true,
       };
 
-
-
-
       const mockDevice = {
         addEventListener: vi.fn(),
         removeEventListener: vi.fn(),
@@ -534,8 +531,6 @@ describe('LXD02Printer Authentication & Print Completion', () => {
         connected: true,
       };
 
-
-
       const mockDevice = {
         addEventListener: vi.fn(),
         removeEventListener: vi.fn(),
@@ -565,8 +560,5 @@ describe('LXD02Printer Authentication & Print Completion', () => {
       expect(error.message).toBe('Persistent Error');
       expect(mockServer.getPrimaryService).toHaveBeenCalledTimes(3);
     });
-
-
-
   });
 });
