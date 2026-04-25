@@ -6,13 +6,14 @@ const CHR_TX_UUID = 0xffe1; // Write Without Response
 const CHR_RX_UUID = 0xffe2; // Notify
 
 export interface PrinterStatus {
-  battery: number;
-  isOutOfPaper: boolean;
-  isCharging: boolean;
-  isOverheat: boolean;
-  isLowBattery: boolean;
-  density: number;
-  voltage: number;
+  battery?: number;
+  isOutOfPaper?: boolean;
+  isCharging?: boolean;
+  isOverheat?: boolean;
+  isLowBattery?: boolean;
+  density?: number;
+  voltage?: number;
+  isPrinting: boolean;
 }
 
 export class LXD02Printer {
@@ -169,86 +170,105 @@ export class LXD02Printer {
   ): Promise<void> {
     if (!this.tx) throw new Error('Printer not connected');
 
-    if (options?.density !== undefined) {
-      await this.setDensity(options.density);
+    if (this.status?.isPrinting) {
+      throw new Error('Printer is already printing');
     }
 
-    const packets = processImage(data);
-    const packetCount = packets.length;
-
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this.printResolver = undefined;
-        this._onRetransmitRequested = undefined;
-        reject(new Error('Print timeout'));
-      }, 30000);
-
-      this.printResolver = () => {
-        clearTimeout(timeout);
-        this._onRetransmitRequested = undefined;
-        resolve();
+    if (!this.status) {
+      this.status = {
+        isPrinting: false,
       };
+    }
 
-      const sendPacketsFrom = async (startIndex: number) => {
-        isSending = true;
-        try {
-          let i = startIndex;
-          while (i < packetCount) {
-            // Check if a retransmission was requested via notification during the loop
-            if (this._resendRequestedIndex !== null) {
-              const target = this._resendRequestedIndex;
-              this._resendRequestedIndex = null;
-              if (target < packetCount) {
-                i = target;
+    this.status.isPrinting = true;
+    try {
+      this.notifyStatus();
+      if (options?.density !== undefined) {
+        await this.setDensity(options.density);
+      }
+
+      const packets = processImage(data);
+      const packetCount = packets.length;
+
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          this.printResolver = undefined;
+          this._onRetransmitRequested = undefined;
+          reject(new Error('Print timeout'));
+        }, 30000);
+
+        this.printResolver = () => {
+          clearTimeout(timeout);
+          this._onRetransmitRequested = undefined;
+          resolve();
+        };
+
+        const sendPacketsFrom = async (startIndex: number) => {
+          isSending = true;
+          try {
+            let i = startIndex;
+            while (i < packetCount) {
+              // Check if a retransmission was requested via notification during the loop
+              if (this._resendRequestedIndex !== null) {
+                const target = this._resendRequestedIndex;
+                this._resendRequestedIndex = null;
+                if (target < packetCount) {
+                  i = target;
+                }
               }
+
+              await this.sendRaw(packets[i]!);
+              i++;
             }
-
-            await this.sendRaw(packets[i]!);
-            i++;
+          } catch (err) {
+            clearTimeout(timeout);
+            this.printResolver = undefined;
+            this._onRetransmitRequested = undefined;
+            reject(err);
+          } finally {
+            isSending = false;
           }
-        } catch (err) {
-          clearTimeout(timeout);
-          this.printResolver = undefined;
-          this._onRetransmitRequested = undefined;
-          reject(err);
-        } finally {
-          isSending = false;
-        }
-      };
+        };
 
-      // 1. Send Print Start Command
-      // Length = (Total lines rounded up / 2) + 1 (which is packets.length)
-      const startCmd = new Uint8Array([
-        0x5a,
-        0x04,
-        (packetCount >> 8) & 0xff,
-        packetCount & 0xff,
-        0x00,
-        0x00,
-      ]);
+        // 1. Send Print Start Command
+        // Length = (Total lines rounded up / 2) + 1 (which is packets.length)
+        const startCmd = new Uint8Array([
+          0x5a,
+          0x04,
+          (packetCount >> 8) & 0xff,
+          packetCount & 0xff,
+          0x00,
+          0x00,
+        ]);
 
-      let isSending = false;
+        let isSending = false;
 
-      this._onRetransmitRequested = async (targetIndex: number) => {
-        if (isSending) {
-          // If a loop is already running, just update the index so the loop will jump backwards.
-          this._resendRequestedIndex = targetIndex;
-        } else {
-          // If the loop finished but we haven't received completion (0x06) yet, start a new loop.
-          this._resendRequestedIndex = null;
-          await sendPacketsFrom(targetIndex);
-        }
-      };
+        this._onRetransmitRequested = async (targetIndex: number) => {
+          if (isSending) {
+            // If a loop is already running, just update the index so the loop will jump backwards.
+            this._resendRequestedIndex = targetIndex;
+          } else {
+            // If the loop finished but we haven't received completion (0x06) yet, start a new loop.
+            this._resendRequestedIndex = null;
+            await sendPacketsFrom(targetIndex);
+          }
+        };
 
-      this.sendRaw(startCmd)
-        .then(() => sendPacketsFrom(0))
-        .catch((err) => {
-          clearTimeout(timeout);
-          this.printResolver = undefined;
-          this._onRetransmitRequested = undefined;
-          reject(err);
-        });
-    });
+        this.sendRaw(startCmd)
+          .then(() => sendPacketsFrom(0))
+          .catch((err) => {
+            clearTimeout(timeout);
+            this.printResolver = undefined;
+            this._onRetransmitRequested = undefined;
+            reject(err);
+          });
+      });
+    } finally {
+      if (this.status) {
+        this.status.isPrinting = false;
+        this.notifyStatus();
+      }
+    }
   }
 
   private async handleNotifications(event: Event) {
@@ -332,9 +352,10 @@ export class LXD02Printer {
             isLowBattery: value[6] === 0x01,
             density: value[7]! + 1,
             voltage: (value[8]! << 8) | value[9]!,
+            isPrinting: this.status?.isPrinting ?? false,
           };
           this.status = status;
-          this.onStatusChange?.(status);
+          this.notifyStatus();
         }
         break;
 
@@ -380,6 +401,16 @@ export class LXD02Printer {
     }
     if (this.device?.gatt?.connected) {
       this.device.gatt.disconnect();
+    }
+  }
+
+  private notifyStatus(): void {
+    if (this.onStatusChange && this.status) {
+      try {
+        this.onStatusChange({ ...this.status });
+      } catch (err) {
+        console.error('Unhandled error in onStatusChange callback:', err);
+      }
     }
   }
 }
