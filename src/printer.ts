@@ -71,7 +71,10 @@ export class LXD02Printer {
       await new Promise((resolve) => setTimeout(resolve, 300));
 
       // Discovery with retries
-      const MAX_ATTEMPTS = 5;
+      // On Windows, getPrimaryService often hangs from the 3rd attempt onwards
+      // if the connection is unstable. We set MAX_ATTEMPTS to 3 and use a timeout
+      // to catch these hangs.
+      const MAX_ATTEMPTS = 3;
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         try {
           if (!this.device?.gatt?.connected) {
@@ -95,6 +98,7 @@ export class LXD02Printer {
               )
             ),
           ]);
+
 
           this.tx = await service.getCharacteristic(CHR_TX_UUID);
           this.rx = await service.getCharacteristic(CHR_RX_UUID);
