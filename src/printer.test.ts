@@ -441,10 +441,16 @@ describe('LXD02Printer Authentication & Print Completion', () => {
         disconnect: vi.fn(),
         getPrimaryService: vi
           .fn()
-          .mockRejectedValueOnce(new Error('GATT Error'))
+          .mockImplementationOnce(async () => {
+            throw new Error('GATT Error');
+          })
           .mockResolvedValueOnce(mockService),
         connected: true,
       };
+
+
+
+
       const mockDevice = {
         addEventListener: vi.fn(),
         removeEventListener: vi.fn(),
@@ -522,11 +528,14 @@ describe('LXD02Printer Authentication & Print Completion', () => {
       const mockServer = {
         connect: vi.fn().mockImplementation(async () => mockServer),
         disconnect: vi.fn(),
-        getPrimaryService: vi
-          .fn()
-          .mockRejectedValue(new Error('Persistent Error')),
+        getPrimaryService: vi.fn().mockImplementation(async () => {
+          throw new Error('Persistent Error');
+        }),
         connected: true,
       };
+
+
+
       const mockDevice = {
         addEventListener: vi.fn(),
         removeEventListener: vi.fn(),
@@ -542,10 +551,22 @@ describe('LXD02Printer Authentication & Print Completion', () => {
 
       const connectPromise = printer.connect();
 
-      await vi.runAllTimersAsync();
+      // Attach a catch handler immediately to prevent Unhandled Rejection errors
+      // in some test environments. We'll verify the error later.
+      const caughtErrorPromise = connectPromise.catch((e) => e);
 
-      await expect(connectPromise).rejects.toThrow('Persistent Error');
+      // We need to advance timers repeatedly to go through the retry loop
+      for (let i = 0; i < 3; i++) {
+        await vi.runAllTimersAsync();
+      }
+
+      const error = await caughtErrorPromise;
+      expect(error).toBeDefined();
+      expect(error.message).toBe('Persistent Error');
       expect(mockServer.getPrimaryService).toHaveBeenCalledTimes(3);
     });
+
+
+
   });
 });
