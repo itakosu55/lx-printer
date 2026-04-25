@@ -347,10 +347,20 @@ describe('LXD02Printer Authentication & Print Completion', () => {
     it('should register and unregister gattserverdisconnected listener', async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const printer = new LXD02Printer() as any;
+      const mockServer = {
+        getPrimaryService: vi.fn().mockResolvedValue({
+          getCharacteristic: vi.fn().mockResolvedValue({
+            startNotifications: vi.fn().mockResolvedValue(undefined),
+            stopNotifications: vi.fn().mockResolvedValue(undefined),
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+          }),
+        }),
+      };
       const mockDevice = {
         addEventListener: vi.fn(),
         removeEventListener: vi.fn(),
-        gatt: { connect: vi.fn().mockResolvedValue({}) },
+        gatt: { connect: vi.fn().mockResolvedValue(mockServer) },
       };
 
       // Mock navigator.bluetooth
@@ -361,15 +371,10 @@ describe('LXD02Printer Authentication & Print Completion', () => {
         requestDevice: vi.fn().mockResolvedValue(mockDevice as any),
       };
 
-      // Mock other methods to prevent full connection flow
-      printer.getPrimaryService = vi.fn().mockResolvedValue({});
+      // Mock authenticate to prevent full connection flow
       printer.authenticate = vi.fn().mockResolvedValue(undefined);
 
-      try {
-        await printer.connect();
-      } catch {
-        // Expected to fail in getPrimaryService mock but we care about listener
-      }
+      await printer.connect();
 
       expect(mockDevice.addEventListener).toHaveBeenCalledWith(
         'gattserverdisconnected',
@@ -390,6 +395,21 @@ describe('LXD02Printer Authentication & Print Completion', () => {
       // Restore
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (global.navigator as any).bluetooth = originalBluetooth;
+    });
+
+    it('should reject pending operations on disconnect', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const printer = new LXD02Printer() as any;
+      printer.tx = {
+        writeValueWithoutResponse: vi.fn().mockResolvedValue(undefined),
+      };
+      printer.status = { isConnected: true, isPrinting: false };
+
+      const printPromise = printer.print(new Uint8Array(48));
+
+      printer.handleDisconnect();
+
+      await expect(printPromise).rejects.toThrow('Printer disconnected');
     });
   });
 });
