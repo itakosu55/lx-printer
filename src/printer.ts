@@ -222,11 +222,13 @@ export class LXD02Printer {
       };
 
       // Stage 0: Initiate Authentication
-      this.sendRaw(new Uint8Array([FRAME_HEADER, Cmd.AUTH_INIT])).catch((err) => {
-        clearTimeout(timeout);
-        this.authResolver = undefined;
-        reject(err);
-      });
+      this.sendRaw(new Uint8Array([FRAME_HEADER, Cmd.AUTH_INIT])).catch(
+        (err) => {
+          clearTimeout(timeout);
+          this.authResolver = undefined;
+          reject(err);
+        }
+      );
     });
   }
 
