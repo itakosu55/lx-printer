@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { calculateCrc16Xmodem, calculateAuthResponse } from './auth';
+import { LXPrinterError } from './errors';
 
 describe('auth', () => {
   it('should calculate CRC-16/XMODEM correctly', () => {
@@ -21,5 +22,29 @@ describe('auth', () => {
       new Uint8Array([0x00, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff])
     );
     expect(response[0]).toBe((expectedCrc0 >> 8) & 0xff);
+  });
+
+  it('should throw LXPrinterError for invalid authBytes length', () => {
+    const badAuth = new Uint8Array(9);
+    const mac = new Uint8Array(6);
+    try {
+      calculateAuthResponse(badAuth, mac);
+      throw new Error('expected throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(LXPrinterError);
+      expect((err as LXPrinterError).code).toBe('INVALID_AUTH_BYTES');
+    }
+  });
+
+  it('should throw LXPrinterError for invalid macAddress length', () => {
+    const auth = new Uint8Array(10);
+    const badMac = new Uint8Array(5);
+    try {
+      calculateAuthResponse(auth, badMac);
+      throw new Error('expected throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(LXPrinterError);
+      expect((err as LXPrinterError).code).toBe('INVALID_MAC_ADDRESS');
+    }
   });
 });

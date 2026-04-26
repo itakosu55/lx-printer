@@ -1,6 +1,7 @@
 /**
  * Image processing utilities for LX-D02 thermal printer
  */
+import { LXPrinterError } from './errors';
 
 /**
  * Process an image and convert it into 100-byte packets for the LX-D02 printer.
@@ -14,14 +15,19 @@ export function processImage(
   if (data instanceof Uint8Array) {
     binaryData = data;
     if (binaryData.length % 48 !== 0) {
-      throw new Error('Raw data length must be a multiple of 48 (384px / 8)');
+      throw new LXPrinterError(
+        'INVALID_RAW_DATA',
+        'Raw data length must be a multiple of 48 (384px / 8)'
+      );
     }
     lineCount = binaryData.length / 48;
   } else {
     // Process image/canvas to 384px wide dithered 1-bit data
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx) throw new Error('Could not get canvas context');
+    if (!ctx) {
+      throw new LXPrinterError('INVALID_IMAGE', 'Could not get canvas context');
+    }
 
     const sourceWidth =
       data instanceof HTMLImageElement ? data.naturalWidth : data.width;
@@ -29,7 +35,8 @@ export function processImage(
       data instanceof HTMLImageElement ? data.naturalHeight : data.height;
 
     if (sourceWidth === 0 || sourceHeight === 0) {
-      throw new Error(
+      throw new LXPrinterError(
+        'INVALID_IMAGE',
         'Invalid image dimensions: source has 0 width or height. Ensure the image is fully loaded.'
       );
     }

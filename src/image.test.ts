@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { processImage } from './image';
+import { LXPrinterError } from './errors';
 
 describe('image', () => {
   it('should process raw data correctly', () => {
@@ -29,7 +30,13 @@ describe('image', () => {
 
   it('should throw error for invalid raw data length', () => {
     const invalidData = new Uint8Array(10);
-    expect(() => processImage(invalidData)).toThrow();
+    expect(() => processImage(invalidData)).toThrow(LXPrinterError);
+    try {
+      processImage(invalidData);
+    } catch (err) {
+      expect(err).toBeInstanceOf(LXPrinterError);
+      expect((err as LXPrinterError).code).toBe('INVALID_RAW_DATA');
+    }
   });
 
   it('should process canvas elements correctly with dithering', () => {

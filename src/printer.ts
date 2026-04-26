@@ -1,4 +1,5 @@
 import { calculateAuthResponse, generateAuthBytes } from './auth';
+import { LXPrinterError } from './errors';
 import { processImage } from './image';
 
 const SERVICE_UUID = 0xffe6;
@@ -39,7 +40,8 @@ export class LXD02Printer {
 
   async connect(): Promise<void> {
     if (!navigator.bluetooth) {
-      throw new Error(
+      throw new LXPrinterError(
+        'BLUETOOTH_UNSUPPORTED',
         'Web Bluetooth API is not supported in this environment.'
       );
     }
@@ -65,7 +67,12 @@ export class LXD02Printer {
       );
 
       let server = await this.device.gatt?.connect();
-      if (!server) throw new Error('Failed to connect to GATT server');
+      if (!server) {
+        throw new LXPrinterError(
+          'GATT_CONNECT_FAILED',
+          'Failed to connect to GATT server'
+        );
+      }
 
       // Universal stabilization delay after GATT connection
       await new Promise((resolve) => setTimeout(resolve, 300));
@@ -84,7 +91,12 @@ export class LXD02Printer {
               // Best effort
             }
             server = await this.device?.gatt?.connect();
-            if (!server) throw new Error('Failed to reconnect to GATT server');
+            if (!server) {
+              throw new LXPrinterError(
+                'GATT_CONNECT_FAILED',
+                'Failed to reconnect to GATT server'
+              );
+            }
             await new Promise((resolve) => setTimeout(resolve, 300));
           }
 
@@ -98,7 +110,13 @@ export class LXD02Printer {
               })(),
               new Promise<never>((_, reject) => {
                 timeoutId = setTimeout(
-                  () => reject(new Error('Discovery timeout')),
+                  () =>
+                    reject(
+                      new LXPrinterError(
+                        'DISCOVERY_TIMEOUT',
+                        'Discovery timeout'
+                      )
+                    ),
                   5000
                 );
               }),
@@ -121,7 +139,10 @@ export class LXD02Printer {
       }
 
       if (!this.rx || !this.tx) {
-        throw new Error('Failed to retrieve characteristics');
+        throw new LXPrinterError(
+          'DISCOVERY_FAILED',
+          'Failed to retrieve characteristics'
+        );
       }
 
       // Start listening for notifications
@@ -184,14 +205,17 @@ export class LXD02Printer {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.authResolver = undefined;
-        reject(new Error('Authentication timeout'));
+        reject(new LXPrinterError('AUTH_TIMEOUT', 'Authentication timeout'));
       }, 10000);
 
       this.authResolver = (success, err) => {
         clearTimeout(timeout);
         this.authResolver = undefined;
         if (success) resolve();
-        else reject(err || new Error('Authentication failed'));
+        else
+          reject(
+            err || new LXPrinterError('AUTH_FAILED', 'Authentication failed')
+          );
       };
 
       // Stage 0: Initiate Authentication
@@ -205,16 +229,25 @@ export class LXD02Printer {
 
   async setDensity(density: number): Promise<void> {
     if (!Number.isInteger(density)) {
-      throw new Error('Density must be an integer between 1 and 7');
+      throw new LXPrinterError(
+        'INVALID_DENSITY',
+        'Density must be an integer between 1 and 7'
+      );
     }
 
     if (density < 1 || density > 7) {
-      throw new Error('Density must be between 1 and 7');
+      throw new LXPrinterError(
+        'INVALID_DENSITY',
+        'Density must be between 1 and 7'
+      );
     }
 
     // Guard against in-flight density changes
     if (this.densityResolver) {
-      throw new Error('Density setting is already in progress');
+      throw new LXPrinterError(
+        'DENSITY_IN_PROGRESS',
+        'Density setting is already in progress'
+      );
     }
 
     // Skip if density is already set to the target value
@@ -225,7 +258,9 @@ export class LXD02Printer {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.densityResolver = undefined;
-        reject(new Error('Density setting timeout'));
+        reject(
+          new LXPrinterError('DENSITY_TIMEOUT', 'Density setting timeout')
+        );
       }, 5000);
 
       this.densityResolver = (success, err) => {
@@ -237,7 +272,9 @@ export class LXD02Printer {
           }
           resolve();
         } else {
-          reject(err || new Error('Failed to set density'));
+          reject(
+            err || new LXPrinterError('DENSITY_FAILED', 'Failed to set density')
+          );
         }
       };
 
@@ -253,10 +290,15 @@ export class LXD02Printer {
     data: HTMLImageElement | HTMLCanvasElement | Uint8Array,
     options?: { density?: number }
   ): Promise<void> {
-    if (!this.tx) throw new Error('Printer not connected');
+    if (!this.tx) {
+      throw new LXPrinterError('NOT_CONNECTED', 'Printer not connected');
+    }
 
     if (this.status?.isPrinting) {
-      throw new Error('Printer is already printing');
+      throw new LXPrinterError(
+        'ALREADY_PRINTING',
+        'Printer is already printing'
+      );
     }
 
     if (!this.status) {
@@ -281,7 +323,7 @@ export class LXD02Printer {
         const timeout = setTimeout(() => {
           this.printResolver = undefined;
           this._onRetransmitRequested = undefined;
-          reject(new Error('Print timeout'));
+          reject(new LXPrinterError('PRINT_TIMEOUT', 'Print timeout'));
         }, 30000);
 
         this.printResolver = () => {
@@ -484,7 +526,12 @@ export class LXD02Printer {
   private _lastAuthResponse?: Uint8Array;
 
   private async sendRaw(data: Uint8Array): Promise<void> {
-    if (!this.tx) throw new Error('TX Characteristic not available');
+    if (!this.tx) {
+      throw new LXPrinterError(
+        'NOT_CONNECTED',
+        'TX Characteristic not available'
+      );
+    }
     // Web Bluetooth GATT characteristic writeValueWithoutResponse
     await this.tx.writeValueWithoutResponse(data as BufferSource);
   }
@@ -517,7 +564,10 @@ export class LXD02Printer {
     }
 
     // 2. Reject in-flight operations
-    const disconnectError = new Error('Printer disconnected');
+    const disconnectError = new LXPrinterError(
+      'DISCONNECTED',
+      'Printer disconnected'
+    );
     if (this.authResolver) {
       this.authResolver(false, disconnectError);
     }
