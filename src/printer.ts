@@ -1,10 +1,13 @@
 import { calculateAuthResponse, generateAuthBytes } from './auth';
 import { LXPrinterError } from './errors';
 import { processImage } from './image';
-
-const SERVICE_UUID = 0xffe6;
-const CHR_TX_UUID = 0xffe1; // Write Without Response
-const CHR_RX_UUID = 0xffe2; // Notify
+import {
+  CHR_RX_UUID,
+  CHR_TX_UUID,
+  Cmd,
+  FRAME_HEADER,
+  SERVICE_UUID,
+} from './protocol';
 
 export interface PrinterStatus {
   isConnected: boolean;
@@ -219,11 +222,13 @@ export class LXD02Printer {
       };
 
       // Stage 0: Initiate Authentication
-      this.sendRaw(new Uint8Array([0x5a, 0x01])).catch((err) => {
-        clearTimeout(timeout);
-        this.authResolver = undefined;
-        reject(err);
-      });
+      this.sendRaw(new Uint8Array([FRAME_HEADER, Cmd.AUTH_INIT])).catch(
+        (err) => {
+          clearTimeout(timeout);
+          this.authResolver = undefined;
+          reject(err);
+        }
+      );
     });
   }
 
@@ -278,7 +283,9 @@ export class LXD02Printer {
         }
       };
 
-      this.sendRaw(new Uint8Array([0x5a, 0x0c, density - 1])).catch((err) => {
+      this.sendRaw(
+        new Uint8Array([FRAME_HEADER, Cmd.DENSITY, density - 1])
+      ).catch((err) => {
         clearTimeout(timeout);
         this.densityResolver = undefined;
         reject(err);
@@ -372,8 +379,8 @@ export class LXD02Printer {
         // 1. Send Print Start Command
         // Length = (Total lines rounded up / 2) + 1 (which is packets.length)
         const startCmd = new Uint8Array([
-          0x5a,
-          0x04,
+          FRAME_HEADER,
+          Cmd.PRINT,
           (packetCount >> 8) & 0xff,
           packetCount & 0xff,
           0x00,
@@ -419,12 +426,12 @@ export class LXD02Printer {
       characteristic.value.byteOffset,
       characteristic.value.byteLength
     );
-    if (value.length < 2 || value[0] !== 0x5a) return;
+    if (value.length < 2 || value[0] !== FRAME_HEADER) return;
 
     const cmd = value[1];
 
     switch (cmd) {
-      case 0x01: // Auth Stage 1: Received MAC
+      case Cmd.AUTH_INIT: // Auth Stage 1: Received MAC
         if (value.length >= 10) {
           const mac = value.subarray(4, 10);
           const authBytes = generateAuthBytes();
@@ -435,38 +442,38 @@ export class LXD02Printer {
 
           // Send Challenge
           const challengeCmd = new Uint8Array(12);
-          challengeCmd[0] = 0x5a;
-          challengeCmd[1] = 0x0a;
+          challengeCmd[0] = FRAME_HEADER;
+          challengeCmd[1] = Cmd.AUTH_CHALLENGE;
           challengeCmd.set(authBytes, 2);
           await this.sendRaw(challengeCmd);
         }
         break;
 
-      case 0x0a: // Auth Stage 2: Prompt for response
+      case Cmd.AUTH_CHALLENGE: // Auth Stage 2: Prompt for response
         if (this._lastAuthResponse) {
           const respCmd = new Uint8Array(12);
-          respCmd[0] = 0x5a;
-          respCmd[1] = 0x0b;
+          respCmd[0] = FRAME_HEADER;
+          respCmd[1] = Cmd.AUTH_RESPONSE;
           respCmd.set(this._lastAuthResponse, 2);
           await this.sendRaw(respCmd);
           this._lastAuthResponse = undefined;
         }
         break;
 
-      case 0x0b: // Auth Stage 3: Result
+      case Cmd.AUTH_RESPONSE: // Auth Stage 3: Result
         if (this.authResolver && value.length >= 3) {
           this.authResolver(value[2] === 0x01);
           this.authResolver = undefined;
         }
         break;
 
-      case 0x0c: // Density setting ACK
+      case Cmd.DENSITY: // Density setting ACK
         if (this.densityResolver && value.length >= 3) {
           this.densityResolver(true);
         }
         break;
 
-      case 0x05: // Retransmission Request
+      case Cmd.RETRANSMIT: // Retransmission Request
         if (value.length >= 4) {
           const seq = (value[2]! << 8) | value[3]!;
           // Based on observations: Packet 0x0075 triggers resend from sequence 116 (0x74)
@@ -482,7 +489,7 @@ export class LXD02Printer {
         }
         break;
 
-      case 0x02: // Status
+      case Cmd.STATUS: // Status
         if (value.length >= 12) {
           const status: PrinterStatus = {
             isConnected: true,
@@ -500,14 +507,14 @@ export class LXD02Printer {
         }
         break;
 
-      case 0x06: // Print Completion
+      case Cmd.PRINT_END: // Print Completion
         if (value.length >= 4) {
           const printLen = (value[2]! << 8) | value[3]!;
           // Send ACK
           await this.sendRaw(
             new Uint8Array([
-              0x5a,
-              0x04,
+              FRAME_HEADER,
+              Cmd.PRINT,
               (printLen >> 8) & 0xff,
               printLen & 0xff,
               0x01,
