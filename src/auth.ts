@@ -1,3 +1,5 @@
+import { LXPrinterError } from './errors';
+
 /**
  * CRC-16/XMODEM calculation (polynomial: 0x1021)
  */
@@ -38,8 +40,18 @@ export function calculateAuthResponse(
   authBytes: Uint8Array,
   macAddress: Uint8Array
 ): Uint8Array {
-  if (authBytes.length !== 10) throw new Error('authBytes must be 10 bytes');
-  if (macAddress.length !== 6) throw new Error('macAddress must be 6 bytes');
+  if (authBytes.length !== 10) {
+    throw new LXPrinterError(
+      'INVALID_AUTH_BYTES',
+      'authBytes must be 10 bytes'
+    );
+  }
+  if (macAddress.length !== 6) {
+    throw new LXPrinterError(
+      'INVALID_MAC_ADDRESS',
+      'macAddress must be 6 bytes'
+    );
+  }
 
   const response = new Uint8Array(10);
   for (let i = 0; i < 10; i++) {

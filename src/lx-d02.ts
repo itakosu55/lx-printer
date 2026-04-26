@@ -1,4 +1,5 @@
 import { LXD02Printer as BaseLXD02Printer } from './printer';
+import { LXPrinterError } from './errors';
 
 function assertSupportedEnvironment() {
   const isBrowser =
@@ -6,13 +7,15 @@ function assertSupportedEnvironment() {
   const isBluetoothSupported = isBrowser && 'bluetooth' in navigator;
 
   if (!isBrowser) {
-    throw new Error(
+    throw new LXPrinterError(
+      'ENV_UNSUPPORTED',
       'lx-printer/lx-d02: This library is intended for use in a browser environment only and is not compatible with Node.js or other server-side environments.'
     );
   }
 
   if (!isBluetoothSupported) {
-    throw new Error(
+    throw new LXPrinterError(
+      'BLUETOOTH_UNSUPPORTED',
       'lx-printer/lx-d02: Web Bluetooth API is not supported in this browser. The printer library will not function.'
     );
   }
@@ -28,3 +31,5 @@ export class LXD02Printer extends BaseLXD02Printer {
 }
 
 export type { PrinterStatus } from './printer';
+export { LXPrinterError, isLXPrinterError } from './errors';
+export type { LXErrorCode } from './errors';

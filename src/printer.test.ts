@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { LXD02Printer, PrinterStatus } from './printer';
+import { LXPrinterError } from './errors';
 
 describe('LXD02Printer Authentication & Print Completion', () => {
   it('should complete authentication sequence correctly', async () => {
@@ -167,6 +168,15 @@ describe('LXD02Printer Authentication & Print Completion', () => {
       await expect(printer.setDensity(2.5)).rejects.toThrow(
         'Density must be an integer between 1 and 7'
       );
+
+      // Verify the new error API: instanceof + code
+      await expect(printer.setDensity(0)).rejects.toMatchObject({
+        name: 'LXPrinterError',
+        code: 'INVALID_DENSITY',
+      });
+      await expect(printer.setDensity(0)).rejects.toBeInstanceOf(
+        LXPrinterError
+      );
     });
 
     it('should throw error if density setting is already in progress', async () => {
@@ -177,9 +187,13 @@ describe('LXD02Printer Authentication & Print Completion', () => {
       };
 
       const p1 = printer.setDensity(4);
-      await expect(printer.setDensity(5)).rejects.toThrow(
+      const inProgress = printer.setDensity(5);
+      await expect(inProgress).rejects.toThrow(
         'Density setting is already in progress'
       );
+      await expect(inProgress).rejects.toMatchObject({
+        code: 'DENSITY_IN_PROGRESS',
+      });
 
       // Clean up by simulating ACK
       const mockValue = new Uint8Array([0x5a, 0x0c, 0x03]);
@@ -228,9 +242,11 @@ describe('LXD02Printer Authentication & Print Completion', () => {
       expect(statusChanges[statusChanges.length - 1].isPrinting).toBe(true);
 
       // 2. Try to start another print (should fail)
-      await expect(printer.print(new Uint8Array(48))).rejects.toThrow(
-        'Printer is already printing'
-      );
+      const concurrent = printer.print(new Uint8Array(48));
+      await expect(concurrent).rejects.toThrow('Printer is already printing');
+      await expect(concurrent).rejects.toMatchObject({
+        code: 'ALREADY_PRINTING',
+      });
 
       // 3. Complete the first print (simulate completion notification)
       const mockValue = new Uint8Array([0x5a, 0x06, 0x00, 0x02]);
@@ -410,6 +426,10 @@ describe('LXD02Printer Authentication & Print Completion', () => {
       printer.handleDisconnect();
 
       await expect(printPromise).rejects.toThrow('Printer disconnected');
+      await expect(printPromise).rejects.toBeInstanceOf(LXPrinterError);
+      await expect(printPromise).rejects.toMatchObject({
+        code: 'DISCONNECTED',
+      });
     });
   });
 

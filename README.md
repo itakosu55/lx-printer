@@ -13,6 +13,7 @@ A TypeScript library for controlling the LX-D02 thermal printer via the Web Blue
 - **Status Monitoring**: Real-time updates for battery level, voltage, charging state, and error flags (out of paper, overheat, etc.).
 - **Retransmission Support**: Automatically handles retransmission requests from the printer for stable communication.
 - **Browser Only**: Explicit environment checks to prevent accidental use in non-browser environments (Node.js).
+- **Typed Errors**: All library-thrown errors are instances of `LXPrinterError` with stable `code` identifiers for reliable handling. See [Error Handling](#error-handling).
 
 ## Installation
 
@@ -107,6 +108,73 @@ Disconnects the current GATT connection.
 - `isOverheat`?: boolean
 - `isLowBattery`?: boolean
 - `density`?: number (1-7) representing the current hardware density level
+
+## Error Handling
+
+All library-defined errors thrown by this library are instances of `LXPrinterError`, which extends the standard `Error` class with a stable `code` property. Browser- or platform-originated errors from underlying APIs may still be propagated unwrapped. Always branch on `code` rather than matching against `message` — messages may be reworded between releases, but codes are part of the public API.
+
+```typescript
+import { LXD02Printer, LXPrinterError } from 'lx-printer/lx-d02';
+
+const printer = new LXD02Printer();
+
+try {
+  await printer.connect();
+  await printer.print(image, { density: 5 });
+} catch (err) {
+  if (err instanceof LXPrinterError) {
+    switch (err.code) {
+      case 'BLUETOOTH_UNSUPPORTED':
+        alert('This browser does not support Web Bluetooth.');
+        break;
+      case 'DISCONNECTED':
+        // Re-attempt connection
+        break;
+      case 'PRINT_TIMEOUT':
+      case 'DISCOVERY_TIMEOUT':
+        // Retry with backoff
+        break;
+      case 'INVALID_DENSITY':
+        // Show validation message in UI
+        break;
+      default:
+        console.error(`[${err.code}] ${err.message}`);
+    }
+  } else {
+    // Non-library errors (e.g. user cancelled the device picker)
+    throw err;
+  }
+}
+```
+
+A type guard `isLXPrinterError(value)` is also exported for callers that prefer not to import the class.
+
+### Error Codes
+
+| Category       | Code                    | Thrown when                                                                     |
+| -------------- | ----------------------- | ------------------------------------------------------------------------------- |
+| Environment    | `ENV_UNSUPPORTED`       | Library is loaded outside a browser (e.g. Node.js).                             |
+|                | `BLUETOOTH_UNSUPPORTED` | The Web Bluetooth API is not available in the current browser.                  |
+| Connection     | `GATT_CONNECT_FAILED`   | The GATT server returned no connection.                                         |
+|                | `DISCOVERY_FAILED`      | The required GATT service or characteristics could not be retrieved.            |
+|                | `DISCOVERY_TIMEOUT`     | GATT service discovery hung past the internal timeout (5 s).                    |
+|                | `NOT_CONNECTED`         | An operation was attempted before `connect()` succeeded.                        |
+|                | `DISCONNECTED`          | The printer disconnected while an operation (auth/density/print) was in flight. |
+| Authentication | `AUTH_FAILED`           | The printer rejected the challenge-response handshake.                          |
+|                | `AUTH_TIMEOUT`          | Authentication did not complete within 10 s.                                    |
+| Density        | `DENSITY_IN_PROGRESS`   | `setDensity()` was called while a previous call was still pending.              |
+|                | `DENSITY_TIMEOUT`       | The density-set ACK did not arrive within 5 s.                                  |
+|                | `DENSITY_FAILED`        | The printer reported failure for the density-set request.                       |
+|                | `INVALID_DENSITY`       | The density argument was not an integer in `[1, 7]`.                            |
+| Printing       | `ALREADY_PRINTING`      | `print()` was called while another print job was running.                       |
+|                | `PRINT_TIMEOUT`         | The print job did not complete within 30 s.                                     |
+| Validation     | `INVALID_RAW_DATA`      | A raw `Uint8Array` length is not a multiple of 48 bytes.                        |
+|                | `INVALID_IMAGE`         | The provided image/canvas has zero dimensions or no 2D context.                 |
+|                | `INVALID_AUTH_BYTES`    | (Internal) Auth challenge bytes are not exactly 10 bytes.                       |
+|                | `INVALID_MAC_ADDRESS`   | (Internal) MAC address is not exactly 6 bytes.                                  |
+
+> [!NOTE]
+> Errors originating from the browser itself (e.g. the user cancelling the device picker, which throws a `DOMException` with name `NotFoundError`, or a transient `NetworkError` from `writeValueWithoutResponse`) are propagated unwrapped. Use `instanceof LXPrinterError` to distinguish library errors from these.
 
 ## Acknowledgments
 
