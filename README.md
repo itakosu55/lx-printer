@@ -111,7 +111,7 @@ Disconnects the current GATT connection.
 
 ## Error Handling
 
-All errors thrown by this library are instances of `LXPrinterError`, which extends the standard `Error` class with a stable `code` property. Always branch on `code` rather than matching against `message` — messages may be reworded between releases, but codes are part of the public API.
+All library-defined errors thrown by this library are instances of `LXPrinterError`, which extends the standard `Error` class with a stable `code` property. Browser- or platform-originated errors from underlying APIs may still be propagated unwrapped. Always branch on `code` rather than matching against `message` — messages may be reworded between releases, but codes are part of the public API.
 
 ```typescript
 import { LXD02Printer, LXPrinterError } from 'lx-printer/lx-d02';

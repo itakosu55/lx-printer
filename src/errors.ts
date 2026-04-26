@@ -1,8 +1,10 @@
 /**
- * Stable identifiers for every error this library throws.
+ * Stable identifiers for library-defined `LXPrinterError` instances.
  *
- * Prefer matching on `error.code` over `error.message` — messages may be
- * reworded between releases, but codes are part of the public API.
+ * Prefer matching on `error.code` over `error.message` for errors confirmed
+ * to be `LXPrinterError`s — messages may be reworded between releases, but
+ * codes are part of the public API. Underlying browser/DOM errors may also be
+ * thrown and will not necessarily have a `code`.
  */
 export type LXErrorCode =
   // Environment
