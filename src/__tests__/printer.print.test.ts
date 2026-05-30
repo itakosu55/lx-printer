@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { type PrinterStatus } from '../printer';
+import { PrintData } from '../image';
 import { createTestPrinter, simulateNotification } from './helpers';
 
 describe('LXD02Printer Print Completion', () => {
@@ -36,7 +37,9 @@ describe('LXD02Printer Concurrency & Defensive Copy', () => {
     });
 
     // Start printing
-    const printPromise = printer.print(new Uint8Array(48 * 2));
+    const printPromise = printer.print(
+      PrintData.fromRaw(new Uint8Array(48 * 2))
+    );
 
     // 1. Verify isPrinting is true and status notification was called
     expect(printer.status.isPrinting).toBe(true);
@@ -44,7 +47,7 @@ describe('LXD02Printer Concurrency & Defensive Copy', () => {
     expect(statusChanges[statusChanges.length - 1].isPrinting).toBe(true);
 
     // 2. Try to start another print (should fail)
-    const concurrent = printer.print(new Uint8Array(48));
+    const concurrent = printer.print(PrintData.fromRaw(new Uint8Array(48)));
     await expect(concurrent).rejects.toThrow('Printer is already printing');
     await expect(concurrent).rejects.toMatchObject({
       code: 'ALREADY_PRINTING',
@@ -91,7 +94,7 @@ describe('LXD02Printer Concurrency & Defensive Copy', () => {
     });
 
     // Start printing
-    const printPromise = printer.print(new Uint8Array(48));
+    const printPromise = printer.print(PrintData.fromRaw(new Uint8Array(48)));
 
     expect(printer.status.isPrinting).toBe(true);
 

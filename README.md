@@ -26,7 +26,7 @@ npm install lx-printer
 ### Basic Image Printing
 
 ```typescript
-import { LXD02Printer } from 'lx-printer/lx-d02';
+import { LXD02Printer, PrintData } from 'lx-printer/lx-d02';
 
 const printer = new LXD02Printer({
   onStatusChange: (status) => {
@@ -50,7 +50,8 @@ await printer.connect();
 
 // Print an HTML image or canvas element (with optional density 1-7)
 const img = document.getElementById('my-image') as HTMLImageElement;
-await printer.print(img, { density: 7 });
+const printData = PrintData.fromImage(img, { algorithm: 'dither' });
+await printer.print(printData, { density: 7 });
 
 // Disconnect when done
 printer.disconnect();
@@ -63,7 +64,8 @@ If you have pre-dithered 384px wide data (48 bytes per line), you can send it di
 ```typescript
 const rawData = new Uint8Array(48 * 100); // 100 lines
 // ... fill data ...
-await printer.print(rawData);
+const printData = PrintData.fromRaw(rawData);
+await printer.print(printData);
 ```
 
 ## API Reference
@@ -78,16 +80,41 @@ await printer.print(rawData);
 
 Requests a Bluetooth device matching the LX prefix and establishes a connection. Performs challenge-response authentication automatically.
 
-#### `print(data: HTMLImageElement | HTMLCanvasElement | Uint8Array, options?: { density?: number }): Promise<void>`
+#### `print(data: PrintData, options?: { density?: number }): Promise<void>`
 
 Sends print data to the printer.
 
-- If `data` is `HTMLImageElement` or `HTMLCanvasElement`, it will be automatically resized to 384px width, converted to grayscale, and dithered.
-- If `data` is a `Uint8Array`, it is treated as raw 1-bit-per-pixel binary data (must be a multiple of 48 bytes).
+- `data` must be an instance of `PrintData`.
 - `options.density`: Optional density setting from `1` (lightest) to `7` (darkest). If provided, it automatically sends a density configuration command before printing. It intelligently skips sending the command if the printer is already set to the desired density.
 
 > [!WARNING]
 > The printer does not support concurrent print jobs. If `print()` is called while another print job is in progress, it will immediately throw an error (`Printer is already printing`). You can check the current printing status via `PrinterStatus.isPrinting`.
+
+### `PrintData`
+
+Represents print data ready to be sent to the printer.
+
+#### `static fromImage(data: HTMLImageElement | HTMLCanvasElement, options?: ImagePrintOptions): PrintData`
+
+Creates print data from an image or canvas element. It is automatically resized to 384px width.
+
+**Options (`options`):**
+
+- `algorithm`: The image processing algorithm to use.
+  - `'dither'` (default): Applies Floyd-Steinberg dithering. Use this when you want to print general images or photos beautifully.
+  - `'threshold'`: Applies simple black/white thresholding. Use this when you want to print images that have already been optimized for thermal printers (like pixel art or pre-processed line drawings).
+- `threshold`: The threshold value (from `0` to `255`) used when `algorithm` is `'threshold'`. Pixels with grayscale luminance below this value become black, while pixels above become white. (default: `128`). Must be a finite integer.
+
+**Throws:**
+
+- `ENV_UNSUPPORTED`: If called outside of a browser environment (e.g., SSR or Node.js).
+- `INVALID_IMAGE`: If the image dimensions are zero or if the canvas 2D context cannot be created.
+- `INVALID_ALGORITHM`: If an unsupported algorithm name is passed.
+- `INVALID_THRESHOLD`: If the `threshold` value is not a finite integer between `0` and `255`.
+
+#### `static fromRaw(data: Uint8Array): PrintData`
+
+Creates print data from raw 1-bit-per-pixel binary data (must be a multiple of 48 bytes, representing 384px width).
 
 #### `setDensity(density: number): Promise<void>`
 
@@ -114,13 +141,15 @@ Disconnects the current GATT connection.
 All library-defined errors thrown by this library are instances of `LXPrinterError`, which extends the standard `Error` class with a stable `code` property. Browser- or platform-originated errors from underlying APIs may still be propagated unwrapped. Always branch on `code` rather than matching against `message` — messages may be reworded between releases, but codes are part of the public API.
 
 ```typescript
-import { LXD02Printer, LXPrinterError } from 'lx-printer/lx-d02';
+import { LXD02Printer, PrintData, LXPrinterError } from 'lx-printer/lx-d02';
 
 const printer = new LXD02Printer();
 
 try {
   await printer.connect();
-  await printer.print(image, { density: 5 });
+  const img = document.getElementById('my-image') as HTMLImageElement;
+  const printData = PrintData.fromImage(img);
+  await printer.print(printData, { density: 5 });
 } catch (err) {
   if (err instanceof LXPrinterError) {
     switch (err.code) {
@@ -169,7 +198,9 @@ A type guard `isLXPrinterError(value)` is also exported for callers that prefer 
 | Printing       | `ALREADY_PRINTING`      | `print()` was called while another print job was running.                       |
 |                | `PRINT_TIMEOUT`         | The print job did not complete within 30 s.                                     |
 | Validation     | `INVALID_RAW_DATA`      | A raw `Uint8Array` length is not a multiple of 48 bytes.                        |
-|                | `INVALID_IMAGE`         | The provided image/canvas has zero dimensions or no 2D context.                 |
+|                | `INVALID_IMAGE`         | The provided image/canvas has zero dimensions, no 2D context, or invalid width. |
+|                | `INVALID_ALGORITHM`     | An unknown algorithm is passed to `fromImage`.                                  |
+|                | `INVALID_THRESHOLD`     | The threshold parameter is not a finite integer in `[0, 255]`.                  |
 |                | `INVALID_AUTH_BYTES`    | (Internal) Auth challenge bytes are not exactly 10 bytes.                       |
 |                | `INVALID_MAC_ADDRESS`   | (Internal) MAC address is not exactly 6 bytes.                                  |
 
