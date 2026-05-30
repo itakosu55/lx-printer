@@ -3,26 +3,48 @@
  */
 import { LXPrinterError } from './errors';
 
-/**
- * Process an image and convert it into 100-byte packets for the LX-D02 printer.
- */
-export function processImage(
-  data: HTMLImageElement | HTMLCanvasElement | Uint8Array
-): Uint8Array[] {
-  let binaryData: Uint8Array;
-  let lineCount: number;
+export interface ImagePrintOptions {
+  /**
+   * The image processing algorithm to use.
+   * 'dither': Applies Floyd-Steinberg dithering. Recommended for general photos and images to print beautifully.
+   * 'threshold': Applies simple black/white thresholding. Recommended for pre-optimized pixel art or line drawings.
+   * @default 'dither'
+   */
+  algorithm?: 'dither' | 'threshold';
+  /**
+   * The threshold value (0-255) when algorithm is 'threshold'.
+   * @default 128
+   */
+  threshold?: number;
+}
 
-  if (data instanceof Uint8Array) {
-    binaryData = data;
-    if (binaryData.length % 48 !== 0) {
+export class PrintData {
+  private constructor(private readonly packets: Uint8Array[]) {}
+
+  /**
+   * Create PrintData from raw 1-bit per pixel binary data.
+   * The data must be 384 pixels wide, meaning 48 bytes per line.
+   */
+  static fromRaw(data: Uint8Array): PrintData {
+    if (data.length % 48 !== 0) {
       throw new LXPrinterError(
         'INVALID_RAW_DATA',
         'Raw data length must be a multiple of 48 (384px / 8)'
       );
     }
-    lineCount = binaryData.length / 48;
-  } else {
-    // Process image/canvas to 384px wide dithered 1-bit data
+    const lineCount = data.length / 48;
+    const packets = packetize(data, lineCount);
+    return new PrintData(packets);
+  }
+
+  /**
+   * Create PrintData from an HTML image or canvas element.
+   * Automatically resizes to 384px width and applies the specified algorithm.
+   */
+  static fromImage(
+    data: HTMLImageElement | HTMLCanvasElement,
+    options?: ImagePrintOptions
+  ): PrintData {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) {
@@ -53,11 +75,32 @@ export function processImage(
     ctx.drawImage(data, 0, 0, targetWidth, targetHeight);
 
     const imageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
-    binaryData = applyDitheringAndPack(imageData);
-    lineCount = targetHeight;
+    const algorithm = options?.algorithm ?? 'dither';
+
+    let binaryData: Uint8Array;
+    if (algorithm === 'threshold') {
+      const thresholdValue = options?.threshold ?? 128;
+      binaryData = applyThresholdAndPack(imageData, thresholdValue);
+    } else {
+      binaryData = applyDitheringAndPack(imageData);
+    }
+
+    const packets = packetize(binaryData, targetHeight);
+    return new PrintData(packets);
   }
 
-  // Split into 96-byte blocks (2 lines) and create 100-byte packets
+  /**
+   * @internal
+   */
+  getPackets(): Uint8Array[] {
+    return this.packets;
+  }
+}
+
+/**
+ * Split into 96-byte blocks (2 lines) and create 100-byte packets
+ */
+function packetize(binaryData: Uint8Array, lineCount: number): Uint8Array[] {
   const packets: Uint8Array[] = [];
   const totalBlocks = Math.ceil(lineCount / 2);
 
@@ -71,7 +114,6 @@ export function processImage(
     const endOffset = Math.min(startOffset + 96, binaryData.length);
     packet.set(binaryData.subarray(startOffset, endOffset), 3);
 
-    // Byte[99] is 0x00 padding (already 0 by initialization)
     packets.push(packet);
   }
 
@@ -83,6 +125,36 @@ export function processImage(
   packets.push(footer);
 
   return packets;
+}
+
+/**
+ * Apply simple thresholding and pack into 1-bit per pixel
+ */
+function applyThresholdAndPack(
+  imageData: ImageData,
+  threshold: number
+): Uint8Array {
+  const { width, height, data } = imageData;
+  const packed = new Uint8Array(height * 48);
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4;
+      const r = data[i]!;
+      const g = data[i + 1]!;
+      const b = data[i + 2]!;
+      // Y = 0.299R + 0.587G + 0.114B
+      const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+
+      if (gray < threshold) {
+        const byteIdx = y * 48 + Math.floor(x / 8);
+        const bitIdx = 7 - (x % 8);
+        packed[byteIdx] |= 1 << bitIdx;
+      }
+    }
+  }
+
+  return packed;
 }
 
 /**
@@ -122,7 +194,6 @@ function applyDitheringAndPack(imageData: ImageData): Uint8Array {
   }
 
   // 3. Pack into bits (White=0, Black=1)
-  // Each line is 384px = 48 bytes
   const packed = new Uint8Array(height * 48);
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {

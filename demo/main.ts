@@ -1,4 +1,4 @@
-import { LXD02Printer } from '../src/lx-d02';
+import { LXD02Printer, PrintData } from '../src/lx-d02';
 
 const btnConnect = document.getElementById('btn-connect') as HTMLButtonElement;
 const btnPrint = document.getElementById('btn-print') as HTMLButtonElement;
@@ -157,7 +157,8 @@ btnPrint.addEventListener('click', async () => {
     if (selectDensity.value) {
       options.density = parseInt(selectDensity.value, 10);
     }
-    await printer.print(data, options);
+    const printData = PrintData.fromRaw(data);
+    await printer.print(printData, options);
     log('Print completed.', 'success');
   } catch (err) {
     handleError(err, 'Print failed');
@@ -194,7 +195,8 @@ inputFile.addEventListener('change', async (e) => {
     if (selectDensity.value) {
       options.density = parseInt(selectDensity.value, 10);
     }
-    await printer.print(img, options);
+    const printData = PrintData.fromImage(img);
+    await printer.print(printData, options);
     log('Printing finished!', 'success');
 
     URL.revokeObjectURL(url);

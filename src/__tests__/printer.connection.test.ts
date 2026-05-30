@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { LXD02Printer, type PrinterStatus } from '../printer';
+import { PrintData } from '../image';
 import { LXPrinterError } from '../errors';
 import { createTestPrinter } from './helpers';
 
@@ -78,7 +79,7 @@ describe('LXD02Printer Disconnection', () => {
     const { printer } = createTestPrinter();
     printer.status = { isConnected: true, isPrinting: false };
 
-    const printPromise = printer.print(new Uint8Array(48));
+    const printPromise = printer.print(PrintData.fromRaw(new Uint8Array(48)));
 
     printer.handleDisconnect();
 

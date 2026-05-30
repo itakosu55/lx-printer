@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { processImage } from './image';
+import { PrintData } from './image';
 import { LXPrinterError } from './errors';
 
 describe('image', () => {
@@ -8,7 +8,8 @@ describe('image', () => {
     const rawData = new Uint8Array(96);
     rawData.fill(0xaa); // Dummy pattern
 
-    const packets = processImage(rawData);
+    const printData = PrintData.fromRaw(rawData);
+    const packets = printData.getPackets();
 
     // Should result in 1 data packet + 1 footer packet = 2 packets
     expect(packets.length).toBe(2);
@@ -30,9 +31,9 @@ describe('image', () => {
 
   it('should throw error for invalid raw data length', () => {
     const invalidData = new Uint8Array(10);
-    expect(() => processImage(invalidData)).toThrow(LXPrinterError);
+    expect(() => PrintData.fromRaw(invalidData)).toThrow(LXPrinterError);
     try {
-      processImage(invalidData);
+      PrintData.fromRaw(invalidData);
     } catch (err) {
       expect(err).toBeInstanceOf(LXPrinterError);
       expect((err as LXPrinterError).code).toBe('INVALID_RAW_DATA');
@@ -87,7 +88,8 @@ describe('image', () => {
       // 3. Process the image
       // Target width is 384px. Scale = 384/192 = 2.
       // Target height should be 10 * 2 = 20.
-      const packets = processImage(inputCanvas);
+      const printData = PrintData.fromImage(inputCanvas);
+      const packets = printData.getPackets();
 
       // 20 lines -> 10 packets (2 lines per packet) + 1 footer = 11 packets
       expect(packets.length).toBe(11);

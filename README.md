@@ -26,7 +26,7 @@ npm install lx-printer
 ### Basic Image Printing
 
 ```typescript
-import { LXD02Printer } from 'lx-printer/lx-d02';
+import { LXD02Printer, PrintData } from 'lx-printer/lx-d02';
 
 const printer = new LXD02Printer({
   onStatusChange: (status) => {
@@ -50,7 +50,8 @@ await printer.connect();
 
 // Print an HTML image or canvas element (with optional density 1-7)
 const img = document.getElementById('my-image') as HTMLImageElement;
-await printer.print(img, { density: 7 });
+const printData = PrintData.fromImage(img, { algorithm: 'dither' });
+await printer.print(printData, { density: 7 });
 
 // Disconnect when done
 printer.disconnect();
@@ -63,7 +64,8 @@ If you have pre-dithered 384px wide data (48 bytes per line), you can send it di
 ```typescript
 const rawData = new Uint8Array(48 * 100); // 100 lines
 // ... fill data ...
-await printer.print(rawData);
+const printData = PrintData.fromRaw(rawData);
+await printer.print(printData);
 ```
 
 ## API Reference
@@ -78,16 +80,32 @@ await printer.print(rawData);
 
 Requests a Bluetooth device matching the LX prefix and establishes a connection. Performs challenge-response authentication automatically.
 
-#### `print(data: HTMLImageElement | HTMLCanvasElement | Uint8Array, options?: { density?: number }): Promise<void>`
+#### `print(data: PrintData, options?: { density?: number }): Promise<void>`
 
 Sends print data to the printer.
 
-- If `data` is `HTMLImageElement` or `HTMLCanvasElement`, it will be automatically resized to 384px width, converted to grayscale, and dithered.
-- If `data` is a `Uint8Array`, it is treated as raw 1-bit-per-pixel binary data (must be a multiple of 48 bytes).
+- `data` must be an instance of `PrintData`.
 - `options.density`: Optional density setting from `1` (lightest) to `7` (darkest). If provided, it automatically sends a density configuration command before printing. It intelligently skips sending the command if the printer is already set to the desired density.
 
 > [!WARNING]
 > The printer does not support concurrent print jobs. If `print()` is called while another print job is in progress, it will immediately throw an error (`Printer is already printing`). You can check the current printing status via `PrinterStatus.isPrinting`.
+
+### `PrintData`
+
+Represents print data ready to be sent to the printer.
+
+#### `static fromImage(data: HTMLImageElement | HTMLCanvasElement, options?: ImagePrintOptions): PrintData`
+
+Creates print data from an image or canvas element. It is automatically resized to 384px width.
+
+**Image Processing Algorithms:**
+
+- `dither` (default): Applies Floyd-Steinberg dithering. Use this when you want to print any general images or photos beautifully.
+- `threshold`: Applies simple black/white thresholding. Use this when you want to print images that have already been optimized for thermal printers (like pixel art or pre-processed line drawings).
+
+#### `static fromRaw(data: Uint8Array): PrintData`
+
+Creates print data from raw 1-bit-per-pixel binary data (must be a multiple of 48 bytes, representing 384px width).
 
 #### `setDensity(density: number): Promise<void>`
 

@@ -33,3 +33,5 @@ export class LXD02Printer extends BaseLXD02Printer {
 export type { PrinterStatus } from './printer';
 export { LXPrinterError, isLXPrinterError } from './errors';
 export type { LXErrorCode } from './errors';
+export { PrintData } from './image';
+export type { ImagePrintOptions } from './image';

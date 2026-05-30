@@ -1,6 +1,6 @@
 import { calculateAuthResponse, generateAuthBytes } from './auth';
 import { LXPrinterError } from './errors';
-import { processImage } from './image';
+import { PrintData } from './image';
 import {
   CHR_RX_UUID,
   CHR_TX_UUID,
@@ -293,10 +293,7 @@ export class LXD02Printer {
     });
   }
 
-  async print(
-    data: HTMLImageElement | HTMLCanvasElement | Uint8Array,
-    options?: { density?: number }
-  ): Promise<void> {
+  async print(data: PrintData, options?: { density?: number }): Promise<void> {
     if (!this.tx) {
       throw new LXPrinterError('NOT_CONNECTED', 'Printer not connected');
     }
@@ -323,7 +320,7 @@ export class LXD02Printer {
         await this.setDensity(options.density);
       }
 
-      const packets = processImage(data);
+      const packets = data.getPackets();
       const packetCount = packets.length;
 
       await new Promise<void>((resolve, reject) => {
