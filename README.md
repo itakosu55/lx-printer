@@ -207,6 +207,11 @@ A type guard `isLXPrinterError(value)` is also exported for callers that prefer 
 > [!NOTE]
 > Errors originating from the browser itself (e.g. the user cancelling the device picker, which throws a `DOMException` with name `NotFoundError`, or a transient `NetworkError` from `writeValueWithoutResponse`) are propagated unwrapped. Use `instanceof LXPrinterError` to distinguish library errors from these.
 
+## Tested Devices
+
+- [サーマルプリンター Lily](https://www.gdm.or.jp/crew/2026/0327/628347)  
+  <img width="400" height="300" alt="サーマルプリンター Lily" src="https://github.com/user-attachments/assets/b985d12a-2432-4b81-b1ce-ab0096b54a6d" />
+
 ## Acknowledgments
 
 The protocol implementation in this library is based on the research and reference implementation provided by [paradon/lxprint](https://github.com/paradon/lxprint).
