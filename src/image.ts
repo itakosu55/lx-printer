@@ -80,6 +80,17 @@ export class PrintData {
     let binaryData: Uint8Array;
     if (algorithm === 'threshold') {
       const thresholdValue = options?.threshold ?? 128;
+      if (
+        typeof thresholdValue !== 'number' ||
+        !Number.isInteger(thresholdValue) ||
+        thresholdValue < 0 ||
+        thresholdValue > 255
+      ) {
+        throw new LXPrinterError(
+          'INVALID_THRESHOLD',
+          'Threshold value must be a finite integer between 0 and 255'
+        );
+      }
       binaryData = applyThresholdAndPack(imageData, thresholdValue);
     } else {
       binaryData = applyDitheringAndPack(imageData);
@@ -93,7 +104,7 @@ export class PrintData {
    * @internal
    */
   getPackets(): Uint8Array[] {
-    return this.packets;
+    return this.packets.map((p) => new Uint8Array(p));
   }
 }
 
