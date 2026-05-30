@@ -286,4 +286,92 @@ describe('image', () => {
     expect(packets2[0]![0]).toBe(0x55);
     expect(packets2[0]![3]).toBe(0xaa);
   });
+
+  it('should throw ENV_UNSUPPORTED in non-browser environment', () => {
+    const originalWindow = globalThis.window;
+    const originalDocument = globalThis.document;
+
+    // Temporarily mock as undefined
+    Object.defineProperty(globalThis, 'window', {
+      value: undefined,
+      writable: true,
+      configurable: true,
+    });
+    Object.defineProperty(globalThis, 'document', {
+      value: undefined,
+      writable: true,
+      configurable: true,
+    });
+
+    try {
+      const inputCanvas = {} as HTMLCanvasElement;
+      expect(() => PrintData.fromImage(inputCanvas)).toThrow(LXPrinterError);
+      try {
+        PrintData.fromImage(inputCanvas);
+      } catch (err) {
+        expect(err).toBeInstanceOf(LXPrinterError);
+        expect((err as LXPrinterError).code).toBe('ENV_UNSUPPORTED');
+      }
+    } finally {
+      // Restore original
+      Object.defineProperty(globalThis, 'window', {
+        value: originalWindow,
+        writable: true,
+        configurable: true,
+      });
+      Object.defineProperty(globalThis, 'document', {
+        value: originalDocument,
+        writable: true,
+        configurable: true,
+      });
+    }
+  });
+
+  it('should throw INVALID_ALGORITHM for unknown algorithms', () => {
+    const originalCreateElement = document.createElement.bind(document);
+    document.createElement = (
+      tagName: string,
+      options?: ElementCreationOptions
+    ) => {
+      if (tagName.toLowerCase() === 'canvas') {
+        const fakeCanvas = {
+          width: 0,
+          height: 0,
+          getContext: () => ({
+            fillStyle: '',
+            fillRect: () => {},
+            drawImage: () => {},
+            getImageData: (x: number, y: number, w: number, h: number) => {
+              return {
+                width: w,
+                height: h,
+                data: new Uint8ClampedArray(w * h * 4),
+              };
+            },
+          }),
+        } as unknown as HTMLCanvasElement;
+        return fakeCanvas;
+      }
+      return originalCreateElement(tagName, options);
+    };
+
+    try {
+      const inputCanvas = { width: 384, height: 10 } as HTMLCanvasElement;
+      expect(() =>
+        PrintData.fromImage(inputCanvas, {
+          algorithm: 'unknown_algo' as unknown as 'dither',
+        })
+      ).toThrow(LXPrinterError);
+      try {
+        PrintData.fromImage(inputCanvas, {
+          algorithm: 'unknown_algo' as unknown as 'dither',
+        });
+      } catch (err) {
+        expect(err).toBeInstanceOf(LXPrinterError);
+        expect((err as LXPrinterError).code).toBe('INVALID_ALGORITHM');
+      }
+    } finally {
+      document.createElement = originalCreateElement;
+    }
+  });
 });

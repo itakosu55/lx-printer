@@ -98,10 +98,19 @@ Represents print data ready to be sent to the printer.
 
 Creates print data from an image or canvas element. It is automatically resized to 384px width.
 
-**Image Processing Algorithms:**
+**Options (`options`):**
 
-- `dither` (default): Applies Floyd-Steinberg dithering. Use this when you want to print any general images or photos beautifully.
-- `threshold`: Applies simple black/white thresholding. Use this when you want to print images that have already been optimized for thermal printers (like pixel art or pre-processed line drawings).
+- `algorithm`: The image processing algorithm to use.
+  - `'dither'` (default): Applies Floyd-Steinberg dithering. Use this when you want to print general images or photos beautifully.
+  - `'threshold'`: Applies simple black/white thresholding. Use this when you want to print images that have already been optimized for thermal printers (like pixel art or pre-processed line drawings).
+- `threshold`: The threshold value (from `0` to `255`) used when `algorithm` is `'threshold'`. Pixels with grayscale luminance below this value become black, while pixels above become white. (default: `128`). Must be a finite integer.
+
+**Throws:**
+
+- `ENV_UNSUPPORTED`: If called outside of a browser environment (e.g., SSR or Node.js).
+- `INVALID_IMAGE`: If the image dimensions are zero or if the canvas 2D context cannot be created.
+- `INVALID_ALGORITHM`: If an unsupported algorithm name is passed.
+- `INVALID_THRESHOLD`: If the `threshold` value is not a finite integer between `0` and `255`.
 
 #### `static fromRaw(data: Uint8Array): PrintData`
 
@@ -132,13 +141,15 @@ Disconnects the current GATT connection.
 All library-defined errors thrown by this library are instances of `LXPrinterError`, which extends the standard `Error` class with a stable `code` property. Browser- or platform-originated errors from underlying APIs may still be propagated unwrapped. Always branch on `code` rather than matching against `message` — messages may be reworded between releases, but codes are part of the public API.
 
 ```typescript
-import { LXD02Printer, LXPrinterError } from 'lx-printer/lx-d02';
+import { LXD02Printer, PrintData, LXPrinterError } from 'lx-printer/lx-d02';
 
 const printer = new LXD02Printer();
 
 try {
   await printer.connect();
-  await printer.print(image, { density: 5 });
+  const img = document.getElementById('my-image') as HTMLImageElement;
+  const printData = PrintData.fromImage(img);
+  await printer.print(printData, { density: 5 });
 } catch (err) {
   if (err instanceof LXPrinterError) {
     switch (err.code) {
@@ -187,7 +198,9 @@ A type guard `isLXPrinterError(value)` is also exported for callers that prefer 
 | Printing       | `ALREADY_PRINTING`      | `print()` was called while another print job was running.                       |
 |                | `PRINT_TIMEOUT`         | The print job did not complete within 30 s.                                     |
 | Validation     | `INVALID_RAW_DATA`      | A raw `Uint8Array` length is not a multiple of 48 bytes.                        |
-|                | `INVALID_IMAGE`         | The provided image/canvas has zero dimensions or no 2D context.                 |
+|                | `INVALID_IMAGE`         | The provided image/canvas has zero dimensions, no 2D context, or invalid width. |
+|                | `INVALID_ALGORITHM`     | An unknown algorithm is passed to `fromImage`.                                  |
+|                | `INVALID_THRESHOLD`     | The threshold parameter is not a finite integer in `[0, 255]`.                  |
 |                | `INVALID_AUTH_BYTES`    | (Internal) Auth challenge bytes are not exactly 10 bytes.                       |
 |                | `INVALID_MAC_ADDRESS`   | (Internal) MAC address is not exactly 6 bytes.                                  |
 

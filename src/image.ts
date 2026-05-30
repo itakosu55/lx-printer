@@ -45,6 +45,13 @@ export class PrintData {
     data: HTMLImageElement | HTMLCanvasElement,
     options?: ImagePrintOptions
   ): PrintData {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      throw new LXPrinterError(
+        'ENV_UNSUPPORTED',
+        'PrintData.fromImage is only supported in a browser environment.'
+      );
+    }
+
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) {
@@ -76,6 +83,12 @@ export class PrintData {
 
     const imageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
     const algorithm = options?.algorithm ?? 'dither';
+    if (algorithm !== 'dither' && algorithm !== 'threshold') {
+      throw new LXPrinterError(
+        'INVALID_ALGORITHM',
+        `Unknown algorithm: ${algorithm}`
+      );
+    }
 
     let binaryData: Uint8Array;
     if (algorithm === 'threshold') {
@@ -146,6 +159,12 @@ function applyThresholdAndPack(
   threshold: number
 ): Uint8Array {
   const { width, height, data } = imageData;
+  if (width !== 384) {
+    throw new LXPrinterError(
+      'INVALID_IMAGE',
+      'Image width must be exactly 384px'
+    );
+  }
   const packed = new Uint8Array(height * 48);
 
   for (let y = 0; y < height; y++) {
@@ -158,8 +177,8 @@ function applyThresholdAndPack(
       const gray = 0.299 * r + 0.587 * g + 0.114 * b;
 
       if (gray < threshold) {
-        const byteIdx = y * 48 + Math.floor(x / 8);
-        const bitIdx = 7 - (x % 8);
+        const byteIdx = y * 48 + (x >> 3);
+        const bitIdx = 7 - (x & 7);
         packed[byteIdx] |= 1 << bitIdx;
       }
     }
@@ -173,6 +192,12 @@ function applyThresholdAndPack(
  */
 function applyDitheringAndPack(imageData: ImageData): Uint8Array {
   const { width, height, data } = imageData;
+  if (width !== 384) {
+    throw new LXPrinterError(
+      'INVALID_IMAGE',
+      'Image width must be exactly 384px'
+    );
+  }
   const gray = new Float32Array(width * height);
 
   // 1. Grayscale with luminance correction
@@ -209,8 +234,8 @@ function applyDitheringAndPack(imageData: ImageData): Uint8Array {
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       if (result[y * width + x]) {
-        const byteIdx = y * 48 + Math.floor(x / 8);
-        const bitIdx = 7 - (x % 8);
+        const byteIdx = y * 48 + (x >> 3);
+        const bitIdx = 7 - (x & 7);
         packed[byteIdx] |= 1 << bitIdx;
       }
     }
